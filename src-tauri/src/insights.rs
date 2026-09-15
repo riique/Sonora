@@ -25,7 +25,7 @@ use tauri::Emitter;
 
 pub const INSIGHTS_SCHEMA_VERSION: u32 = 7;
 pub const ANALYSIS_VERSION: u32 = 5;
-pub const VOICE_PROFILE_MODEL: &str = "meta/muse-spark-1.2-contributor";
+pub const VOICE_PROFILE_MODEL: &str = "meta/muse-spark-1.3-contributor";
 const PROFILE_MIN_WORDS: u64 = BASIC_WORDS;
 const PROFILE_REFRESH_WORDS: u64 = 10_000;
 const MIN_TREND_SESSIONS: u64 = 3;
@@ -3601,7 +3601,7 @@ mod tests {
 
     #[test]
     fn muse_spark_is_the_voice_profile_model() {
-        assert_eq!(VOICE_PROFILE_MODEL, "meta/muse-spark-1.2-contributor");
+        assert_eq!(VOICE_PROFILE_MODEL, "meta/muse-spark-1.3-contributor");
     }
 
     #[test]

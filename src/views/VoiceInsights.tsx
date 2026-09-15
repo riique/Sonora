@@ -147,7 +147,7 @@ export function VoiceInsights({ data, reload, developerMode }: {
     {confirm && <dialog ref={dialog} className="voice-confirm" aria-labelledby="voice-confirm-title" aria-describedby="voice-confirm-description" onCancel={() => setConfirm(false)} onClose={() => setConfirm(false)}>
       <h2 id="voice-confirm-title">Criar seu retrato com IA?</h2>
       <p id="voice-confirm-description">O Sonora envia estatísticas e termos filtrados dos seus ditados. Suas gravações e transcrições completas ficam no computador.</p>
-      <p>A geração usa sua chave do OpenRouter e pode ter custo. Modelo: <span className="break-words font-mono text-[12px]">meta/muse-spark-1.2-contributor</span>.</p>
+      <p>A geração usa sua chave do OpenRouter e pode ter custo. Modelo: <span className="break-words font-mono text-[12px]">meta/muse-spark-1.3-contributor</span>.</p>
       <div className="flex flex-wrap justify-end gap-2"><Button onClick={() => setConfirm(false)}>Cancelar</Button><Button variant="primary" onClick={generate}>Criar retrato</Button></div>
     </dialog>}
   </div>;

@@ -1,6 +1,10 @@
 # Sonora v2.0
 
-Sonora é o novo nome da geração Tauri do aplicativo de ditado. A versão 2.0 foi lançada como `2.0.0`; a versão atual é `2.0.2`.
+Sonora é o novo nome da geração Tauri do aplicativo de ditado. A versão 2.0 foi lançada como `2.0.0`; a versão atual é `2.0.3`.
+
+### Atualização 2.0.3
+
+Atualização do modelo padrão de geração de retrato por IA (Voice Profile) via OpenRouter para `meta/muse-spark-1.3-contributor`, sucedendo a versão 1.2.
 
 ### Correção 2.0.2
 
@@ -14,7 +18,7 @@ O botão de criar ou atualizar o retrato permanece visível quando o retrato com
 
 A tela abre com um retrato curto, uma expressão recorrente, até três assuntos e até três hábitos de fala. Uma sugestão prática aparece quando existe no perfil. Preferências, vocabulário, medições de áudio e diagnóstico ficam sob divulgação progressiva. Perfis já salvos continuam legíveis.
 
-O retrato por IA continua opcional e exige confirmação antes de cada geração. Estatísticas agregadas e termos filtrados são enviados pelo OpenRouter ao modelo `meta/muse-spark-1.2-contributor`; áudio e transcrições completas não fazem parte desse envio. A mudança visual não gera perfis automaticamente.
+O retrato por IA continua opcional e exige confirmação antes de cada geração. Estatísticas agregadas e termos filtrados são enviados pelo OpenRouter ao modelo `meta/muse-spark-1.3-contributor`; áudio e transcrições completas não fazem parte desse envio. A mudança visual não gera perfis automaticamente.
 
 ## Gravação sem voz
 
@@ -43,7 +47,7 @@ O ditado é flexível: você pode começar a falar com foco em uma janela e alte
 Após os testes e `npm run tauri build`, a atualização local da instalação antiga pode ser feita com PowerShell 7:
 
 ```powershell
-pwsh -File scripts/install-windows.ps1 -InstallerPath src-tauri/target/release/bundle/nsis/Sonora_2.0.2_x64-setup.exe -BackupRoot F:\Dev-Backup
+pwsh -File scripts/install-windows.ps1 -InstallerPath src-tauri/target/release/bundle/nsis/Sonora_2.0.3_x64-setup.exe -BackupRoot F:\Dev-Backup
 ```
 
 O procedimento exige um diretório de backup existente. Preserva o AppData e os executáveis anteriores, instala Sonora, verifica a versão e só então retira a instalação antiga. Confere hashes dos arquivos originais antes de reabrir. Reaponta inicialização automática e hosts de navegador que apontavam exatamente para a instalação antiga. Outros registros são preservados. A extensão precisa ser recarregada para aplicar seu código novo.
