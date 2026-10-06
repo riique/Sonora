@@ -51,7 +51,7 @@ A orquestração saiu de um monólito em `audio.rs` para módulos dedicados (`tr
 
 | Modo | Fluxo | Sanitizer | Fallback típico |
 |------|--------|-----------|-----------------|
-| ⚡ **Ultrarrápido** | OpenRouter STT → Whisper (Groq fixo) | Não | — |
+| ⚡ **Ultrarrápido** | Whisper via OpenRouter STT (Groq) ou Groq direto | Não | — |
 | 🚀 **Rápido e preciso** | Gemini (Files API / inline) | Não | Whisper (configurável) |
 | 🎯 **Preciso** | Whisper ∥ upload → refine Gemini | Não | Whisper ou Gemini puro |
 | 💎 **Ultrapreciso** | Whisper ∥ upload → sanitizer → Gemini | Sim (JSON) | Texto sanitizado / Whisper |
@@ -72,7 +72,7 @@ O botão **FileTagging** em Configurações ativa ou desativa a regra que conver
 - **Normalização sensível a ruído** — ganho adaptativo limitado, pausas sem amplificação de room tone, limiter em -3 dBFS e original preservado como `.original.wav`
 - **UI de Configurações** — cards de pipeline e botão persistente de FileTagging
 - **Roteamento customizado** — presets ou ID livre por pipeline; OpenRouter separa Chat Completions multimodal de Speech-to-Text dedicado
-- **Whisper no Ultrarrápido** — escolha entre `openai/whisper-large-v3-turbo` e `openai/whisper-large-v3`, sempre pelo provedor Groq no OpenRouter
+- **Whisper no Ultrarrápido** — escolha entre `openai/whisper-large-v3-turbo` e `openai/whisper-large-v3`, via OpenRouter (Groq por baixo) ou Groq direto
 - **Recuperação no gadget** — falhas exibem uma ação **Regenerar** usando o áudio já salvo, sem abrir o Histórico
 - **Telemetria local** — latência por estágio, RTF estimado, throughput (sem analytics externo)
 - Testes unitários Rust no pipeline (`cargo test`)

@@ -419,19 +419,38 @@ fn apply_timing_from_gemini(result: &mut PipelineRun, g: &crate::gemini::GeminiG
     }
 }
 
-/// UltraFast: audio → OpenRouter STT (Whisper on Groq) → text (no sanitizer).
+/// UltraFast: audio → Whisper → text (no sanitizer).
+/// Provider is user-selectable: OpenRouter STT (Whisper pinned to Groq)
+/// or Groq Audio Transcriptions directly. Same model variant either way.
 pub async fn run_ultra_fast(
     state: &Arc<AppState>,
     audio: Vec<u8>,
+    file_name: &str,
+    mime: &str,
     ext: &str,
     _duration_ms: Option<u64>,
 ) -> Result<PipelineRun, String> {
+    use crate::pipeline_contract::UltraFastProvider;
+
     let t0 = std::time::Instant::now();
-    let model = state
-        .gemini_pipelines
-        .read()
-        .ultra_fast_whisper
-        .openrouter_id();
+    let (provider, whisper) = {
+        let routes = state.gemini_pipelines.read();
+        (routes.ultra_fast_provider, routes.ultra_fast_whisper)
+    };
+    match provider {
+        UltraFastProvider::Groq => run_ultra_fast_via_groq(state, audio, file_name, mime, whisper, t0).await,
+        UltraFastProvider::OpenRouter => run_ultra_fast_via_openrouter(state, audio, ext, whisper, t0).await,
+    }
+}
+
+async fn run_ultra_fast_via_openrouter(
+    state: &Arc<AppState>,
+    audio: Vec<u8>,
+    ext: &str,
+    whisper: crate::pipeline_contract::OpenRouterWhisperModel,
+    t0: std::time::Instant,
+) -> Result<PipelineRun, String> {
+    let model = whisper.openrouter_id();
     let api_key = state.next_openrouter_key().ok_or_else(|| {
         "Configure uma chave do OpenRouter em Provedores e APIs para usar o modo Ultrarrápido."
             .to_string()
@@ -513,6 +532,77 @@ pub async fn run_ultra_fast(
         ..Default::default()
     })
 }
+
+async fn run_ultra_fast_via_groq(
+    state: &Arc<AppState>,
+    audio: Vec<u8>,
+    file_name: &str,
+    mime: &str,
+    whisper: crate::pipeline_contract::OpenRouterWhisperModel,
+    t0: std::time::Instant,
+) -> Result<PipelineRun, String> {
+    let model = whisper.groq_id();
+    let api_key = state.next_groq_key().ok_or_else(|| {
+        "Configure uma chave da Groq em Provedores e APIs para usar o modo Ultrarrápido."
+            .to_string()
+    })?;
+    log::info!(
+        "modes: UltraFast → Groq STT model={} (sanitizer off)",
+        model
+    );
+    let bytes_sent = audio.len() as u64;
+    let text = crate::groq::call_whisper_api_with_model(audio, file_name, mime, model, &api_key)
+        .await
+        .map_err(|e| crate::transcription::fallback::groq_err_to_message(&e))?;
+
+    if text.trim().is_empty() {
+        return Err("Nenhum texto detectado na gravação.".to_string());
+    }
+
+    let ms = t0.elapsed().as_millis() as u64;
+    let attempt = ProviderAttempt {
+        id: "attempt-1".into(),
+        provider: "groq".into(),
+        model: model.into(),
+        transport: AudioTransport::Multipart,
+        started_at_ms: crate::pipeline_run::epoch_ms().saturating_sub(ms),
+        duration_ms: Some(ms),
+        status: AttemptStatus::Success,
+        usage: UsageRecord {
+            bytes_sent: Some(bytes_sent),
+            ..Default::default()
+        },
+        result: AttemptResultMetadata {
+            output_chars: Some(text.trim().len()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    Ok(PipelineRun {
+        final_text: text.trim().to_string(),
+        mode: TranscriptionMode::UltraFast,
+        model: model.into(),
+        stages: vec![
+            "whisper".into(),
+            "provider:groq".into(),
+            "model_api:speech-to-text".into(),
+        ],
+        whisper_text: Some(text.trim().to_string()),
+        transcription_latency_ms: ms,
+        history_engine_label: "UltraFast/Groq".into(),
+        whisper_ms: Some(ms),
+        total_pipeline_ms: Some(ms),
+        attempts: vec![attempt],
+        journal: vec![StageRecord::completed(StageKind::Recognition, ms)],
+        timings: crate::pipeline_run::PipelineTimings {
+            request_ms: Some(ms),
+            provider_ms: Some(ms),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+}
+
 
 /// FastAccurate: Gemini (inline or Files) + glossary + strict literals.
 pub async fn run_fast_accurate(
@@ -2097,7 +2187,7 @@ pub async fn run_product_mode_with_duration(
     state.pending_failed_pipeline_run.lock().take();
     let mode = *state.transcription_mode.read();
     let result = match mode {
-        TranscriptionMode::UltraFast => run_ultra_fast(state, audio, ext, duration_ms).await,
+        TranscriptionMode::UltraFast => run_ultra_fast(state, audio, file_name, mime, ext, duration_ms).await,
         TranscriptionMode::FastAccurate => {
             run_fast_accurate(state, audio, ext, file_name, mime, duration_ms).await
         }
@@ -2132,9 +2222,14 @@ fn remember_failed_attempts(
 ) {
     if attempts.is_empty() {
         let (provider, model, transport) = match mode {
-            TranscriptionMode::UltraFast => {
-                ("openrouter", "whisper-large-v3", AudioTransport::Multipart)
-            }
+            TranscriptionMode::UltraFast => match state.gemini_pipelines.read().ultra_fast_provider {
+                crate::pipeline_contract::UltraFastProvider::Groq => {
+                    ("groq", "whisper-large-v3", AudioTransport::Multipart)
+                }
+                crate::pipeline_contract::UltraFastProvider::OpenRouter => {
+                    ("openrouter", "whisper-large-v3", AudioTransport::Multipart)
+                }
+            },
             TranscriptionMode::FastAccurate => {
                 ("gemini", "configured-model", AudioTransport::InlineBase64)
             }

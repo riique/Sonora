@@ -42,10 +42,11 @@ function formatEntryDuration(ms?: number): string {
 function routeDetails(config: ModeConfigSnapshot | null) {
   if (!config) return { engine: "Carregando…", model: "—", provider: "—" };
   if (config.mode === "ultra-fast") {
+    const direct = config.gemini_pipelines.ultra_fast_provider === "groq";
     return {
       engine: "Whisper · baixa latência",
       model: config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo",
-      provider: "OpenRouter · Groq",
+      provider: direct ? "Groq direto" : "OpenRouter · Groq",
     };
   }
   const key =

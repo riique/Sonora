@@ -55,6 +55,7 @@ import {
   type GeminiPipelineChoice,
   type GeminiPipelineConfig,
   type OpenRouterWhisperModel,
+  type UltraFastProvider,
   type VocabularyTerm,
   type VocabularyCategory,
   type WidgetVisibilityMode,
@@ -100,7 +101,7 @@ const MODE_CARDS: {
   {
     id: "ultra-fast",
     title: "Ultrarrápido",
-    engine: "OpenRouter STT · Groq",
+    engine: "Whisper · baixa latência",
     blurb: "Menor latência",
     Icon: Zap,
   },
@@ -449,6 +450,7 @@ function PipelinesTab() {
   const [effort, setEffort] = useState("medium");
   const [status, setStatus] = useState("");
   const [geminiPipelines, setGeminiPipelines] = useState<GeminiPipelineConfig>({
+    ultra_fast_provider: "open-router",
     ultra_fast_whisper: "large-v3-turbo",
     fast_accurate: {
       model: "flash-lite35",
@@ -494,7 +496,10 @@ function PipelinesTab() {
         setMode(m.mode);
         setGeminiFallback(m.gemini_fallback_to_whisper);
         setFileTaggingEnabled(m.file_tagging_enabled);
-        setGeminiPipelines(m.gemini_pipelines);
+        setGeminiPipelines({
+          ultra_fast_provider: "open-router",
+          ...m.gemini_pipelines,
+        });
       })
       .catch(console.error);
     getEngineConfig()
@@ -789,8 +794,28 @@ function PipelinesTab() {
               </div>
             ) : (
               <div className="rounded-b-[11px] border-t border-line bg-white px-5 py-5">
-                <label className="block max-w-2xl space-y-1.5 text-[12px] text-[#555650]">
-                      <span>Modelo Whisper via OpenRouter</span>
+                <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
+                <label className="block space-y-1.5 text-[12px] text-[#555650]">
+                      <span>Provedor</span>
+                      <select
+                        name="ultra-fast-provider"
+                        value={geminiPipelines.ultra_fast_provider ?? "open-router"}
+                        onChange={(e) => {
+                          const next = {
+                            ...geminiPipelines,
+                            ultra_fast_provider: e.target.value as UltraFastProvider,
+                          };
+                          setGeminiPipelines(next);
+                          persistMode({ gemini_pipelines: next });
+                        }}
+                    className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-none"
+                      >
+                        <option value="open-router">OpenRouter (Groq por baixo)</option>
+                        <option value="groq">Groq direto</option>
+                      </select>
+                    </label>
+                <label className="block space-y-1.5 text-[12px] text-[#555650]">
+                      <span>Modelo Whisper</span>
                       <select
                         name="ultra-fast-whisper-model"
                         value={geminiPipelines.ultra_fast_whisper}
@@ -808,8 +833,11 @@ function PipelinesTab() {
                         <option value="large-v3">openai/whisper-large-v3</option>
                       </select>
                     </label>
+                </div>
                 <p className="mt-2 max-w-[72ch] text-[11px] leading-5 text-muted">
-                  Usa somente o endpoint de transcrição do OpenRouter, com o provedor Groq fixo e sem fallback para outro provedor.
+                  {(geminiPipelines.ultra_fast_provider ?? "open-router") === "groq"
+                    ? "Usa o endpoint de transcrição da Groq direto, com a sua chave Groq. Mesmo modelo Whisper, sem passar pelo OpenRouter."
+                    : "Usa o endpoint de transcrição do OpenRouter, com o provedor Groq fixo e sem fallback para outro provedor. Exige chave OpenRouter."}
                 </p>
               </div>
             )}

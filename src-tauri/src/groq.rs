@@ -92,6 +92,52 @@ pub async fn call_whisper_api(
 
     let client = http_client()?;
 
+    let file_part = multipart::Part::bytes(audio_bytes)
+        .file_name(file_name.to_string())
+        .mime_str(mime)?;
+
+    let form = multipart::Form::new()
+        .text("model", WHISPER_MODEL.to_string())
+        .part("file", file_part);
+
+    let response = client
+        .post(GROQ_TRANSCRIPTIONS_URL)
+        .bearer_auth(api_key)
+        .multipart(form)
+        .send()
+        .await?;
+
+    let status = response.status().as_u16();
+
+    if status == 200 {
+        let parsed: TranscriptionResponse = response.json().await?;
+        parsed
+            .text
+            .ok_or(GroqNetworkError::MissingText)
+            .map(|t| t.trim().to_string())
+    } else {
+        let body = response.text().await.unwrap_or_default();
+        Err(GroqNetworkError::ApiError { status, body })
+    }
+}
+
+/// Same as [`call_whisper_api`] but with an explicit Whisper model id
+/// (e.g. `whisper-large-v3-turbo` or `whisper-large-v3`).
+/// Used by the UltraFast pipeline when the user selects Groq direct,
+/// keeping the model choice in sync with the OpenRouter route.
+pub async fn call_whisper_api_with_model(
+    audio_bytes: Vec<u8>,
+    file_name: &str,
+    mime: &str,
+    model: &str,
+    api_key: &str,
+) -> Result<String, GroqNetworkError> {
+    if api_key.trim().is_empty() {
+        return Err(GroqNetworkError::MissingApiKey);
+    }
+
+    let client = http_client()?;
+
     // The file part must carry a filename and the correct MIME type
     // so the Groq backend dispatches to the Whisper decoder rather
     // than treating the payload as generic binary. Microphone captures
@@ -102,7 +148,10 @@ pub async fn call_whisper_api(
         .mime_str(mime)?;
 
     let form = multipart::Form::new()
-        .text("model", WHISPER_MODEL.to_string())
+        .text("model", model.to_string())
+        // Same language hint the OpenRouter route sends, so switching
+        // providers does not change transcription language behavior.
+        .text("language", "pt")
         .part("file", file_part);
 
     let response = client
