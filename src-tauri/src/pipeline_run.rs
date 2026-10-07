@@ -1054,6 +1054,40 @@ impl PipelineRun {
         } else if self.finished_at_ms.is_none() {
             self.finish_success();
         }
+        self.sum_attempt_costs();
+    }
+
+    /// A run can call several paid models (STT, quick refine, voice command).
+    /// `UsageRecord::merge` keeps a single cost, so the run total is the sum of
+    /// the per-attempt costs whenever any attempt reported one.
+    fn sum_attempt_costs(&mut self) {
+        let known = self
+            .attempts
+            .iter()
+            .filter(|attempt| attempt.usage.cost.kind != CostKind::Unknown)
+            .filter_map(|attempt| {
+                attempt
+                    .usage
+                    .cost
+                    .amount_usd
+                    .map(|amount| (attempt, amount))
+            })
+            .collect::<Vec<_>>();
+        if known.is_empty() {
+            return;
+        }
+        let all_actual = known
+            .iter()
+            .all(|(attempt, _)| attempt.usage.cost.kind == CostKind::Actual);
+        self.usage.cost = CostRecord {
+            kind: if all_actual {
+                CostKind::Actual
+            } else {
+                CostKind::Estimated
+            },
+            amount_usd: Some(known.iter().map(|(_, amount)| amount).sum()),
+            source: Some("sum_of_attempts".into()),
+        };
     }
 }
 

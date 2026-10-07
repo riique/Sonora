@@ -1364,7 +1364,7 @@ fn chrono_like_id() -> String {
 
 /// Returns the current local time formatted as `YYYY-MM-DD HH:MM`.
 /// Local wall-clock label `YYYY-MM-DD HH:MM` (not UTC).
-fn now_timestamp() -> String {
+pub(crate) fn now_timestamp() -> String {
     #[cfg(windows)]
     {
         use windows::Win32::System::SystemInformation::GetLocalTime;

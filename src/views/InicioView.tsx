@@ -58,7 +58,7 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [error, setError] = useState("");
   const [pipeline, setPipeline] = useState<ModeConfigSnapshot | null>(null);
-  const [shortcuts, setShortcutsState] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q" });
+  const [shortcuts, setShortcutsState] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q", command: "Control+Shift+B", hold_to_talk: false });
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
@@ -104,6 +104,8 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
   const enabledProfiles = policy?.profiles.filter((profile) => profile.enabled) ?? [];
   const toggleKeys = shortcutKeys(shortcuts.toggle);
   const cancelKeys = shortcutKeys(shortcuts.cancel);
+  const commandKeys = shortcuts.command ? shortcutKeys(shortcuts.command) : null;
+  const hold = shortcuts.hold_to_talk;
 
   return (
     <div>
@@ -115,11 +117,19 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
         </div>
         <p className="mt-3 max-w-[56ch] text-[14px] leading-6 text-muted">
           {onAir === "live"
-            ? <>Fale normalmente. Pressione o atalho de novo para encerrar ou <KbdCombo keys={cancelKeys} /> para cancelar.</>
-            : "Pressione o atalho em qualquer aplicativo e comece a falar. O texto é colado onde estiver o cursor."}
+            ? <>Fale normalmente. {hold ? "Solte o atalho para colar" : "Pressione o atalho de novo para encerrar"} ou <KbdCombo keys={cancelKeys} /> para cancelar.</>
+            : hold
+              ? "Segure o atalho em qualquer aplicativo enquanto fala. Ao soltar, o texto é colado onde estiver o cursor."
+              : "Pressione o atalho em qualquer aplicativo e comece a falar. O texto é colado onde estiver o cursor."}
         </p>
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap items-end gap-x-10 gap-y-4">
           <KbdCombo keys={toggleKeys} size="lg" />
+          {commandKeys && onAir === "off" && (
+            <p className="flex items-center gap-2.5 pb-1 text-[12.5px] text-muted">
+              <KbdCombo keys={commandKeys} />
+              <span>com um texto selecionado: diga o que fazer com ele</span>
+            </p>
+          )}
         </div>
       </section>
 

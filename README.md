@@ -16,6 +16,28 @@ Aplicativo desktop de **digitação por voz** para Windows. Grave com um atalho 
 
 ---
 
+## Novidades desta versão
+
+- **Refinar com IA no Ultrarrápido:** uma passada rápida de IA aplica vocabulário, estilo do aplicativo e contexto autorizado ao texto do Whisper. Pode ser desligada em Ajustes › Transcrição.
+- **Comando de voz (`Ctrl+Shift+B`):** selecione um texto, aperte o atalho e diga o que fazer (“deixa mais formal”, “traduz para inglês”). Sem seleção, o Sonora escreve o que você pedir.
+- **Segurar para falar:** em Ajustes › Geral › Atalhos, escolha entre apertar para alternar ou segurar enquanto fala.
+- **Snippets no meio da frase:** “meu perfil é snippet meu github” expande só o trecho do snippet.
+- **Vocabulário que aprende:** ao corrigir a mesma palavra duas vezes no Histórico, o Sonora oferece guardá-la.
+- **Histórico explica o que aconteceu:** cada ditado mostra o que foi aplicado (IA, vocabulário, style, snippet, offline) e o custo; o topo mostra o total do mês.
+- **Sem internet:** com o modelo local baixado (whisper.cpp), o ditado é transcrito no computador quando todos os provedores falham.
+- **Atualização automática:** novas versões publicadas no GitHub são instaladas ao abrir o app.
+- **Removido:** o caminho legado de motores (Deepgram e motor duplo), que não era mais executado.
+
+### Publicar uma versão (atualização automática)
+
+1. Uma única vez: em *Settings › Secrets and variables › Actions* do repositório, crie `TAURI_SIGNING_PRIVATE_KEY` (conteúdo da chave privada do updater) e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave pública correspondente está em `src-tauri/tauri.conf.json`.
+2. Suba a versão em `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e no topo deste README.
+3. Crie e envie a tag: `git tag v2.1.0 && git push origin v2.1.0`.
+
+O workflow **Release** gera o instalador assinado e o `latest.json`; as instalações existentes encontram a versão nova sozinhas.
+
+---
+
 ## O que faz
 
 - Gravação pelo microfone (atalho global ou botão na UI)
@@ -187,7 +209,7 @@ O identificador interno de dados mantém o nome legado para preservar sua instal
 | Frontend | React 18, TypeScript, Vite 5, Tailwind CSS 3 |
 | Backend | Rust (captura, STT, IPC, OS) |
 | Áudio | cpal (WASAPI no Windows) |
-| STT / LLM | Groq Whisper, Gemini, Deepgram (legado) |
+| STT / LLM | Groq Whisper, Gemini, OpenRouter; whisper.cpp local (offline) |
 | Clipboard / paste | arboard + enigo |
 
 ---

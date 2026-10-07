@@ -119,6 +119,10 @@ export async function evaluatePronunciation(id: string): Promise<string> {
 export interface ShortcutConfig {
   toggle: string;
   cancel: string;
+  /** Voice command shortcut; empty string disables it. */
+  command: string;
+  /** Record only while the shortcut is held down. */
+  hold_to_talk: boolean;
 }
 
 /** Returns the currently active recording shortcuts. */
@@ -131,12 +135,64 @@ export async function getShortcuts(): Promise<ShortcutConfig> {
  * applied config or rejects with a readable error if the combination is
  * invalid or already in use by another application.
  */
-export async function setShortcuts(
-  toggle: string,
-  cancel: string,
-): Promise<ShortcutConfig> {
-  return invoke<ShortcutConfig>("set_shortcuts", { toggle, cancel });
+export async function setShortcuts(config: ShortcutConfig): Promise<ShortcutConfig> {
+  return invoke<ShortcutConfig>("set_shortcuts", {
+    toggle: config.toggle,
+    cancel: config.cancel,
+    command: config.command,
+    holdToTalk: config.hold_to_talk,
+  });
 }
+
+/* ------------------------- Assist features & updates ------------------------- */
+
+export type LocalModel = "base" | "small";
+
+export interface FeatureSettings {
+  /** Ultrarrápido: quick AI pass applying vocabulary, style and context. */
+  quick_refine: boolean;
+  /** Offer repeated corrections as vocabulary right away. */
+  learning_prompts: boolean;
+  /** Transcribe on this computer when every cloud provider fails. */
+  offline_fallback: boolean;
+  offline_model: LocalModel;
+  /** Install new GitHub releases automatically. */
+  auto_update: boolean;
+}
+
+export interface LocalModelStatus {
+  model: LocalModel;
+  installed: boolean;
+  size_bytes?: number | null;
+  downloading: boolean;
+}
+
+export interface LocalModelProgress {
+  model: LocalModel;
+  downloaded: number;
+  total?: number | null;
+}
+
+export interface UpdateInfo {
+  current_version: string;
+  available?: string | null;
+  notes?: string | null;
+  ready_to_install: boolean;
+}
+
+export const getFeatureSettings = () => invoke<FeatureSettings>("get_feature_settings");
+export const setFeatureSettings = (features: FeatureSettings) => invoke<FeatureSettings>("set_feature_settings", { features });
+export const getLocalModelStatus = (model: LocalModel) => invoke<LocalModelStatus>("get_local_model_status", { model });
+export const downloadLocalModel = (model: LocalModel) => invoke<LocalModelStatus>("download_local_model", { model });
+export const removeLocalModel = (model: LocalModel) => invoke<LocalModelStatus>("remove_local_model", { model });
+export const onLocalModelProgress = (handler: (progress: LocalModelProgress) => void): Promise<UnlistenFn> =>
+  listen<LocalModelProgress>("local-model-progress", (event) => handler(event.payload));
+export const checkForUpdate = () => invoke<UpdateInfo>("check_for_update");
+export const installUpdate = () => invoke<void>("install_update");
+export const onUpdateReady = (handler: (info: UpdateInfo) => void): Promise<UnlistenFn> =>
+  listen<UpdateInfo>("update-ready", (event) => handler(event.payload));
+export const onVocabularySuggestion = (handler: (event: CorrectionEvent) => void): Promise<UnlistenFn> =>
+  listen<CorrectionEvent>("vocabulary-suggestion", (event) => handler(event.payload));
 
 /** Toggles the recording flag in the backend and returns the new state. */
 export async function toggleRecordingState(): Promise<boolean> {
@@ -836,6 +892,6 @@ export const generateAiVoiceProfile = () => invoke<VoiceProfile>("generate_ai_vo
 export const addInsightCorrectionToVocabulary = (before: string, after: string) => invoke<void>("add_insight_correction_to_vocabulary", { before, after });
 
 
-export interface HistoryPage { items: HistoryEntry[]; total: number; next_offset: number | null; total_words: number }
+export interface HistoryPage { items: HistoryEntry[]; total: number; next_offset: number | null; total_words: number; month_cost_usd?: number | null; month_dictations?: number }
 export const getHistoryPage = (query = "", offset = 0, limit = 50, deleted = false) => invoke<HistoryPage>("get_history_page", { query, offset, limit, deleted });
 export const getHistoryDetail = (id: string) => invoke<HistoryEntry>("get_history_detail", { id });

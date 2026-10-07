@@ -2319,7 +2319,12 @@ pub(crate) fn finalize_product_result(
             .iter()
             .any(|stage| stage.stage == StageKind::Recognition && stage.provider.is_some())
     {
-        for attempt in result.attempts.clone() {
+        for attempt in result
+            .attempts
+            .clone()
+            .into_iter()
+            .filter(|attempt| !attempt.id.starts_with("attempt-quick-refine"))
+        {
             let mut stage = StageRecord::completed(
                 StageKind::Recognition,
                 attempt.duration_ms.unwrap_or_default(),
@@ -2459,6 +2464,7 @@ pub(crate) fn finalize_product_result(
     result.timings.snippet_ms = Some(snippet_ms);
     let mut snippet_stage = StageRecord::completed(StageKind::SnippetResolution, snippet_ms);
     if let Some(snippet_id) = snippet_id {
+        result.stages.push(format!("snippet:{snippet_id}"));
         snippet_stage
             .metadata
             .insert("snippet_id".into(), snippet_id.into());
