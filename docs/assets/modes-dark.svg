@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="250" viewBox="0 0 1280 250" role="img" aria-label="Os quatro pipelines, do mais rápido ao mais preciso">
+<rect width="1280" height="250" rx="20" fill="#161615"/>
+<rect x=".5" y=".5" width="1279" height="249" rx="19.5" fill="none" stroke="#31312f"/>
+<line x1="110" y1="132" x2="1170" y2="132" stroke="#454543" stroke-width="2"/>
+<text x="110" y="214" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">← mais rápido</text>
+<text x="1170" y="214" text-anchor="end" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">mais preciso →</text>
+<circle cx="170.0" cy="132" r="14.0" fill="#161615"/>
+<circle cx="170.0" cy="132" r="7.0" fill="#f2f2ee" fill-opacity="0.35"/>
+<text x="170.0" y="92" text-anchor="middle" font-family="'Segoe UI Variable Display','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif" font-size="20" font-weight="600" fill="#f2f2ee">Ultrarrápido</text>
+<text x="170.0" y="176" text-anchor="middle" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">Whisper via Groq</text>
+<circle cx="483.3333333333333" cy="132" r="16.4" fill="#161615"/>
+<circle cx="483.3333333333333" cy="132" r="9.4" fill="#f2f2ee" fill-opacity="0.55"/>
+<text x="483.3333333333333" y="92" text-anchor="middle" font-family="'Segoe UI Variable Display','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif" font-size="20" font-weight="600" fill="#f2f2ee">Rápido e preciso</text>
+<text x="483.3333333333333" y="176" text-anchor="middle" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">Gemini multimodal</text>
+<circle cx="796.6666666666666" cy="132" r="18.8" fill="#161615"/>
+<circle cx="796.6666666666666" cy="132" r="11.8" fill="#f2f2ee" fill-opacity="0.75"/>
+<text x="796.6666666666666" y="92" text-anchor="middle" font-family="'Segoe UI Variable Display','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif" font-size="20" font-weight="600" fill="#f2f2ee">Preciso</text>
+<text x="796.6666666666666" y="176" text-anchor="middle" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">Whisper ∥ Gemini refine</text>
+<circle cx="1110.0" cy="132" r="21.2" fill="#161615"/>
+<circle cx="1110.0" cy="132" r="14.2" fill="#f2f2ee" fill-opacity="0.95"/>
+<text x="1110.0" y="92" text-anchor="middle" font-family="'Segoe UI Variable Display','Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif" font-size="20" font-weight="600" fill="#f2f2ee">Ultrapreciso</text>
+<text x="1110.0" y="176" text-anchor="middle" font-family="'Cascadia Mono','Cascadia Code',Consolas,'SFMono-Regular',Menlo,monospace" font-size="12.5" fill="#a3a39d">+ sanitizer JSON</text>
+</svg>

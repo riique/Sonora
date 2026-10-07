@@ -1,208 +1,297 @@
-# Sonora
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.svg">
+  <img alt="Sonora: fale em qualquer aplicativo e o texto chega pronto no campo em foco." src="docs/assets/hero-light.svg" width="100%">
+</picture>
 
-Aplicativo desktop de **digitação por voz** para Windows. Grave com um atalho global, o app transcreve com motores em nuvem, opcionalmente refina o texto e cola no campo focado (`Ctrl+V`).
+<p align="center">
+  <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
+  <img alt="Versão 2.0.1" src="https://img.shields.io/badge/vers%C3%A3o-2.0.1-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
+</p>
 
-**Versão:** 2.0.1 · **Stack:** Tauri 2 · React 18 · TypeScript · Rust
+<p align="center">
+  <a href="#como-funciona"><b>Como funciona</b></a> &nbsp;·&nbsp;
+  <a href="#pipelines">Pipelines</a> &nbsp;·&nbsp;
+  <a href="#comece-agora">Comece agora</a> &nbsp;·&nbsp;
+  <a href="#arquitetura">Arquitetura</a> &nbsp;·&nbsp;
+  <a href="#documentação">Documentação</a>
+</p>
 
-## Sonora v2.0
+<br>
 
-- **Sua voz, mais simples:** um retrato curto, expressões e hábitos de fala, com medições e configurações disponíveis nos detalhes.
-- **Atualização visível:** o botão do retrato permanece à vista com a quantidade de palavras que falta; ele é habilitado quando você pode gerar uma nova versão.
-- **Silêncio tratado no computador:** uma gravação claramente sem voz mostra “Nenhuma voz encontrada” na barra e encerra sem enviar áudio ou colar texto. Falas curtas e baixas são preservadas por uma verificação conservadora.
-- **Troca de aplicativo:** o ditado usa o campo em foco ao parar, com identificação estável entre a gravação e a entrega e orientação em português quando o campo muda depois.
-- **Nova identidade:** Sonora na interface, no executável e nos instaladores. Seus dados e perfis existentes continuam disponíveis.
+**Sonora** é um aplicativo desktop de **digitação por voz** para Windows. Aperte um atalho global, fale, aperte de novo: o áudio é transcrito por motores em nuvem, opcionalmente refinado, e o texto é colado no campo que estava em foco, em qualquer aplicativo.
 
-[Mudanças, compatibilidade e atualização da instalação anterior](docs/SONORA_2.0.md). [Código no GitHub](https://github.com/riique/Sonora).
+A janela principal é o estúdio onde você revisa gravações e ajusta o equipamento. No dia a dia, quem trabalha é o **gadget**: uma pílula preta, sempre no topo, que só acende quando você está no ar.
 
----
+> *Quiet by default. Information appears when needed.*
 
-## O que faz
+<br>
 
-- Gravação pelo microfone (atalho global ou botão na UI)
-- Transcrição em nuvem com **pipelines de produto** (OpenRouter/Groq Whisper + Google Gemini)
-- Cola automática no campo focado (clipboard + simulação de paste)
-- Upload de arquivos de áudio (WAV, MP3, etc.)
-- Histórico local sem limite artificial, com áudio revelável no Explorer, retranscrição e avaliação de pronúncia
-- Modelo customizado por pipeline via Google AI Studio ou OpenRouter (LLM multimodal ou STT dedicado no OpenRouter)
-- FileTagging opcional para converter referências faladas em menções como `@index.tsx` nos modelos multimodais
-- Vocabulário estruturado (termos, aliases, categorias, literais strict)
-- Overlay **gadget** sempre no topo + recuperação direta quando uma transcrição falha
-- Atalhos globais configuráveis (padrão: `Ctrl+B` grava, `Ctrl+Q` cancela)
+## Como funciona
 
----
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/flow-dark.svg">
+  <img alt="Fluxo do ditado: atalho, fala, pipeline, texto colado no campo em foco e registro no histórico." src="docs/assets/flow-light.svg" width="100%">
+</picture>
 
-## Correções da auditoria — 1.0.34
+| | |
+|:--|:--|
+| <kbd>Ctrl</kbd> + <kbd>B</kbd> | Inicia e encerra a gravação, de qualquer aplicativo |
+| <kbd>Ctrl</kbd> + <kbd>Q</kbd> | Cancela sem gerar texto novo |
 
-- Chaves protegidas por DPAPI da conta Windows; somente referências opacas chegam à interface.
-- Escritas atômicas, histórico incremental paginado e recuperação de itens removidos.
-- Captura incremental com limite de 15 minutos, recuperação de áudio interrompido e cancelamento do processamento de ditados.
-- Coleta de contexto do navegador somente por solicitação vigente, conforme as fontes habilitadas.
-- Verificação do campo de destino antes do paste; resultado e falha de entrega permanecem disponíveis no Histórico.
-- Diagnóstico local, backup com áudio opcional, arquivamento e seleção rápida de destino/Style.
-- Dependências corrigidas, permissões separadas por janela e CI Windows com verificações de contratos.
+Os dois atalhos podem ser reconfigurados na tela **Atalhos**.
 
-Qualificação e limites: [auditoria implementada](docs/audit-remediation.md). Procedimentos de dados e distribuição: [recuperação e release](docs/recovery-and-release.md).
+<br>
 
-## Novidades — pipelines de transcrição
+## Novo na versão 2.0
 
-A orquestração saiu de um monólito em `audio.rs` para módulos dedicados (`transcription/`, `gemini/`, contratos e vocabulário). A UI de **Configurações** é centrada nos pipelines de produto ativos.
+**Sua voz, mais simples.** Um retrato curto, suas expressões e hábitos de fala, com medições e configurações nos detalhes. O botão do retrato fica à vista com a quantidade de palavras que falta e é habilitado quando você pode gerar uma nova versão.
 
-### Modos de produto
+**Silêncio tratado no computador.** Uma gravação claramente sem voz mostra “Nenhuma voz encontrada” na barra e encerra sem enviar áudio nem colar texto. Falas curtas e baixas são preservadas por uma verificação conservadora.
+
+**Troca de aplicativo.** O ditado usa o campo em foco ao parar, com identificação estável entre a gravação e a entrega, e orienta em português quando o campo muda depois.
+
+**Nova identidade.** Sonora na interface, no executável e nos instaladores. Seus dados e perfis existentes continuam disponíveis.
+
+→ [Mudanças, compatibilidade e atualização da instalação anterior](docs/SONORA_2.0.md)
+
+<br>
+
+## Pipelines
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/modes-dark.svg">
+  <img alt="Os quatro pipelines, do mais rápido ao mais preciso: Ultrarrápido, Rápido e preciso, Preciso e Ultrapreciso." src="docs/assets/modes-light.svg" width="100%">
+</picture>
+
+Escolha o equilíbrio entre velocidade e precisão em **Configurações**. Cada pipeline aceita um modelo customizado via Google AI Studio ou OpenRouter.
 
 | Modo | Fluxo | Sanitizer | Fallback típico |
-|------|--------|-----------|-----------------|
-| ⚡ **Ultrarrápido** | OpenRouter STT → Whisper (Groq fixo) | Não | — |
-| 🚀 **Rápido e preciso** | Gemini (Files API / inline) | Não | Whisper (configurável) |
-| 🎯 **Preciso** | Whisper ∥ upload → refine Gemini | Não | Whisper ou Gemini puro |
-| 💎 **Ultrapreciso** | Whisper ∥ upload → sanitizer → Gemini | Sim (JSON) | Texto sanitizado / Whisper |
+|:--|:--|:--:|:--|
+| **Ultrarrápido** | OpenRouter STT → Whisper (Groq fixo) | — | — |
+| **Rápido e preciso** | Gemini (Files API ou inline) | — | Whisper (configurável) |
+| **Preciso** | Whisper ∥ upload → refine Gemini | — | Whisper ou Gemini puro |
+| **Ultrapreciso** | Whisper ∥ upload → sanitizer → Gemini | JSON | Texto sanitizado ou Whisper |
 
-### Prompt universal e FileTagging
+No Ultrarrápido, escolha entre `openai/whisper-large-v3-turbo` e `openai/whisper-large-v3`, sempre pelo provedor Groq no OpenRouter. No OpenRouter, Chat Completions multimodal e Speech-to-Text dedicado são roteados separadamente.
 
-Os modelos Gemini multimodais recebem uma `systemInstruction` única que trata, por trecho, conversa comum, programação e conteúdo acadêmico/científico. Não é necessário escolher previamente um tipo de conteúdo.
+**Prompt universal.** Os modelos Gemini multimodais recebem uma única `systemInstruction` que trata, trecho a trecho, conversa comum, programação e conteúdo acadêmico. Não é preciso escolher um tipo de conteúdo antes de falar.
 
-O botão **FileTagging** em Configurações ativa ou desativa a regra que converte referências inequívocas a arquivos em texto simples como `@src/components/Header.tsx`. A função prepara a menção no texto; a integração do IDE/chat continua sob responsabilidade do aplicativo de destino.
+**FileTagging.** Um botão em Configurações converte referências faladas e inequívocas a arquivos em menções como `@src/components/Header.tsx`. O Sonora prepara a menção no texto; a integração com o IDE ou chat fica a cargo do aplicativo de destino.
 
-### Outras melhorias desta entrega
+<br>
 
-- **Módulo Gemini** — Files API, STT, refine (preciso/ultrapreciso), transporte e avaliação de pronúncia
-- **Sanitizer JSON** — saída estruturada no modo Ultrapreciso, com fallback para texto bruto se o formato falhar
-- **Vocabulário estruturado** — canônico + aliases + categoria + flag *strict* (substitui a lista simples de palavras)
-- **Histórico observável** — modo, modelos, estágios, textos intermediários, fallback, latências; copiar / editar / excluir / detalhes / retranscrever / pronúncia
-- **Áudio configurável** — escolha a pasta para novas gravações transcritas e abra cada arquivo diretamente pelo Histórico
-- **Normalização sensível a ruído** — ganho adaptativo limitado, pausas sem amplificação de room tone, limiter em -3 dBFS e original preservado como `.original.wav`
-- **UI de Configurações** — cards de pipeline e botão persistente de FileTagging
-- **Roteamento customizado** — presets ou ID livre por pipeline; OpenRouter separa Chat Completions multimodal de Speech-to-Text dedicado
-- **Whisper no Ultrarrápido** — escolha entre `openai/whisper-large-v3-turbo` e `openai/whisper-large-v3`, sempre pelo provedor Groq no OpenRouter
-- **Recuperação no gadget** — falhas exibem uma ação **Regenerar** usando o áudio já salvo, sem abrir o Histórico
-- **Telemetria local** — latência por estágio, RTF estimado, throughput (sem analytics externo)
-- Testes unitários Rust no pipeline (`cargo test`)
+## O que vem junto
 
-### Arquitetura (visão rápida)
+<table>
+<tr>
+<td width="50%" valign="top">
 
-```text
-src-tauri/src/
-├── audio.rs                 # captura mic, WAV, clipboard/paste
-├── transcription/           # legado + modos de produto + telemetria
-├── gemini/                  # Files API, STT, refine, pronúncia
-├── pipeline_contract.rs     # TranscriptionMode, configuração e estágios
-├── vocabulary.rs            # termos estruturados
-├── sanitizer_json.rs        # parse da saída JSON do sanitizer
-├── groq.rs                  # Whisper e sanitizer
-└── history.rs / settings.rs
+**Captura**
 
-src/views/
-├── ConfiguracoesView.tsx    # pipelines + FileTagging + vocabulário
-├── HistoricoView.tsx        # cards, detalhes, ações
-└── TranscricaoView.tsx      # upload de arquivo
-```
+- Microfone por atalho global ou pelo botão na interface
+- Normalização sensível a ruído: ganho adaptativo limitado, pausas sem amplificar o ruído de sala, limiter em −3 dBFS e original preservado como `.original.wav`
+- Captura incremental com limite de 15 minutos e recuperação de áudio interrompido
+- Upload de arquivos de áudio (WAV, MP3 e outros)
 
-Documentação técnica da migração: [`docs/TRANSCRIPTION_MIGRATION_FINAL_REPORT.md`](docs/TRANSCRIPTION_MIGRATION_FINAL_REPORT.md).
+</td>
+<td width="50%" valign="top">
 
----
+**Entrega**
 
-## Requisitos
+- Cola automática no campo focado (clipboard + paste simulado)
+- Verificação do campo de destino antes do paste
+- Se a entrega falhar, o resultado continua no Histórico
+- No gadget, uma falha oferece **Regenerar** com o áudio já salvo, sem abrir o Histórico
 
-1. **Node.js 24** (npm)
-2. **Rust 1.97.1** via [rustup](https://rustup.rs/)
-3. Chaves de API (conforme o modo):
-   - **Groq** — Preciso, Ultrapreciso, sanitizer e fallbacks legados
-   - **Google (Gemini)** — Rápido e preciso, Preciso, Ultrapreciso, pronúncia
-   - **OpenRouter** — obrigatório no Ultrarrápido; também aceita modelos multimodais com áudio e modelos dedicados de transcrição
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
----
+**Histórico**
 
-## Desenvolvimento
+- Local, sem limite artificial, paginado e incremental
+- Modo, modelos, estágios, textos intermediários, fallback e latências de cada ditado
+- Copiar, editar, excluir, retranscrever e avaliar a pronúncia
+- Áudio revelável no Explorer, em uma pasta que você escolhe
+
+</td>
+<td width="50%" valign="top">
+
+**Vocabulário e controle**
+
+- Vocabulário estruturado: grafia canônica, aliases, categoria e literais *strict*
+- Telemetria apenas local: latência por estágio, RTF estimado e throughput
+- Diagnóstico local, backup com áudio opcional e arquivamento
+- Seleção rápida de destino e Style
+
+</td>
+</tr>
+</table>
+
+<br>
+
+## Comece agora
+
+### Requisitos
+
+- **Node.js 24** com npm
+- **Rust 1.97.1** via [rustup](https://rustup.rs/)
+- Chaves de API, conforme o pipeline:
+
+| Provedor | Usado em |
+|:--|:--|
+| **OpenRouter** | Obrigatório no Ultrarrápido; também aceita modelos multimodais com áudio e modelos dedicados de transcrição |
+| **Google Gemini** | Rápido e preciso, Preciso, Ultrapreciso e avaliação de pronúncia |
+| **Groq** | Preciso, Ultrapreciso, sanitizer e fallbacks legados |
+
+### Desenvolvimento
 
 ```bash
 npm install
-npm run tauri dev
+npm run tauri dev     # app completo
+npm run dev           # só a interface, sem o backend nativo
 ```
 
-Só a UI (sem backend nativo completo):
-
-```bash
-npm run dev
-```
-
----
-
-## Build de produção
+### Build de produção
 
 ```bash
 npm run tauri build
 ```
 
-Se o `cargo` não estiver no `PATH` (Windows / PowerShell):
+<details>
+<summary>O <code>cargo</code> não está no <code>PATH</code> (Windows / PowerShell)?</summary>
 
 ```powershell
 $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
 npm run tauri build
 ```
 
-**Artefatos típicos:**
+</details>
 
-- Executável: `src-tauri/target/release/sonora.exe`
-- Instaladores: `src-tauri/target/release/bundle/nsis/` e `bundle/msi/`
+| Artefato | Caminho |
+|:--|:--|
+| Executável | `src-tauri/target/release/sonora.exe` |
+| Instaladores | `src-tauri/target/release/bundle/nsis/` e `bundle/msi/` |
 
-Detalhes: [`BUILD.md`](BUILD.md).
+Detalhes em [`BUILD.md`](BUILD.md).
 
----
+### Primeiro ditado
 
-## Uso rápido
+1. Abra **Configurações** e salve as chaves de API do pipeline que vai usar.
+2. Escolha um pipeline: Ultrarrápido, Rápido e preciso, Preciso ou Ultrapreciso.
+3. Clique no campo de texto onde o texto deve chegar e aperte <kbd>Ctrl</kbd> + <kbd>B</kbd>.
+4. Fale. Aperte <kbd>Ctrl</kbd> + <kbd>B</kbd> de novo para parar: o texto é colado no campo e entra no **Histórico**.
+5. Mudou de ideia? <kbd>Ctrl</kbd> + <kbd>Q</kbd> cancela sem gerar texto.
 
-1. Abra **Configurações** e salve as chaves de API necessárias.
-2. Escolha um **pipeline** (Ultrarrápido, Rápido e preciso, Preciso ou Ultrapreciso).
-3. Foque o campo de texto de destino e use o atalho de gravação (`Ctrl+B` por padrão).
-4. Pare a gravação com o mesmo atalho; o texto final é colado no campo focado e entra no **Histórico**.
-5. Cancele com `Ctrl+Q` (sem gerar texto novo).
+> [!NOTE]
+> A gravação pelo microfone **cola** no campo focado; o upload de arquivo **não** cola automaticamente. Arquivos de áudio acima de ~50 MB são rejeitados.
 
-**Notas:**
+<br>
 
-- Gravação pelo mic **cola** no campo focado; upload de arquivo **não** cola automaticamente.
-- Arquivos de áudio grandes (> ~50 MB) são rejeitados.
-- Dados locais (histórico, settings, chaves, áudios): `%APPDATA%\com.haumeavoice.app\`
+## Seus dados
 
-O identificador interno de dados mantém o nome legado para preservar sua instalação. Para atualizar a instalação anterior para a pasta Sonora com backup e verificação de dados, siga [o procedimento Windows](docs/SONORA_2.0.md#instalação-windows).
+Tudo fica no seu computador, em `%APPDATA%\com.haumeavoice.app\`: histórico, configurações, chaves e áudios.
 
----
+- As chaves de API são protegidas pelo **DPAPI** da sua conta Windows; a interface recebe apenas referências opacas.
+- Escritas são atômicas, e itens removidos podem ser recuperados.
+- O contexto do navegador só é coletado mediante solicitação vigente, conforme as fontes habilitadas.
+- Não há analytics externo.
 
-## Telas
+O identificador interno de dados mantém o nome legado para preservar sua instalação. Para migrar para a pasta Sonora com backup e verificação, siga [o procedimento Windows](docs/SONORA_2.0.md#instalação-windows).
 
-| View | Função |
-|------|--------|
-| Início | Status, contadores, iniciar gravação |
-| Transcrição | Upload de arquivo |
-| Histórico | Entradas, métricas, retranscrever, pronúncia |
-| Atalhos | Rebind de toggle/cancel |
-| Configurações | Pipelines, chaves, vocabulário, avançado |
-| Gadget | Overlay compacto always-on-top |
+<br>
 
----
+## Arquitetura
 
-## Stack
+A orquestração vive em módulos dedicados (`transcription/`, `gemini/`, contratos e vocabulário), e a tela de **Configurações** é centrada nos pipelines de produto ativos.
+
+```text
+src-tauri/src/
+├── audio.rs                 captura do microfone, WAV, clipboard e paste
+├── transcription/           modos de produto, legado e telemetria
+├── gemini/                  Files API, STT, refine e pronúncia
+├── pipeline_contract.rs     TranscriptionMode, configuração e estágios
+├── vocabulary.rs            termos estruturados
+├── sanitizer_json.rs        parse da saída JSON do sanitizer
+├── groq.rs                  Whisper e sanitizer
+└── history.rs · settings.rs
+
+src/views/
+├── ConfiguracoesView.tsx    pipelines, FileTagging e vocabulário
+├── HistoricoView.tsx        lista, detalhes e ações
+└── TranscricaoView.tsx      upload de arquivo
+```
+
+| Tela | Para quê |
+|:--|:--|
+| **Início** | Status, contadores e gravação |
+| **Transcrição** | Upload de arquivo |
+| **Histórico** | Ditados, métricas, retranscrição e pronúncia |
+| **Atalhos** | Reconfigurar gravar e cancelar |
+| **Configurações** | Pipelines, chaves, vocabulário e avançado |
+| **Gadget** | Pílula compacta, sempre no topo |
 
 | Camada | Tecnologia |
-|--------|------------|
+|:--|:--|
 | Shell | Tauri 2 |
-| Frontend | React 18, TypeScript, Vite 5, Tailwind CSS 3 |
-| Backend | Rust (captura, STT, IPC, OS) |
+| Interface | React 18 · TypeScript · Vite 5 · Tailwind CSS 3 |
+| Backend | Rust: captura, STT, IPC e sistema operacional |
 | Áudio | cpal (WASAPI no Windows) |
-| STT / LLM | Groq Whisper, Gemini, Deepgram (legado) |
-| Clipboard / paste | arboard + enigo |
+| STT e LLM | Groq Whisper · Google Gemini · OpenRouter · Deepgram (legado) |
+| Clipboard e paste | arboard · enigo |
 
----
+<br>
 
 ## Testes
 
 ```bash
-cd src-tauri
-cargo test
+cd src-tauri && cargo test
 ```
 
-Checklist manual: [`docs/MANUAL_TEST_CHECKLIST.md`](docs/MANUAL_TEST_CHECKLIST.md).
+O CI no Windows roda lint, testes de frontend e de UI, build, `cargo fmt`, `clippy` e `cargo test` a cada push. Para a verificação manual, use o [checklist](docs/MANUAL_TEST_CHECKLIST.md).
 
----
+<details>
+<summary><b>Correções da auditoria 1.0.34</b></summary>
+
+<br>
+
+- Chaves protegidas por DPAPI da conta Windows; somente referências opacas chegam à interface.
+- Escritas atômicas, histórico incremental paginado e recuperação de itens removidos.
+- Captura incremental com limite de 15 minutos, recuperação de áudio interrompido e cancelamento do processamento de ditados.
+- Coleta de contexto do navegador somente por solicitação vigente, conforme as fontes habilitadas.
+- Verificação do campo de destino antes do paste; resultado e falha de entrega permanecem disponíveis no Histórico.
+- Diagnóstico local, backup com áudio opcional, arquivamento e seleção rápida de destino e Style.
+- Dependências corrigidas, permissões separadas por janela e CI Windows com verificações de contratos.
+
+Qualificação e limites em [auditoria implementada](docs/audit-remediation.md).
+
+</details>
+
+<br>
+
+## Documentação
+
+| | |
+|:--|:--|
+| [Sonora 2.0](docs/SONORA_2.0.md) | Mudanças, compatibilidade e migração da instalação |
+| [Build](BUILD.md) | Gerar executável e instaladores |
+| [Recuperação e release](docs/recovery-and-release.md) | Procedimentos de dados e distribuição |
+| [Auditoria implementada](docs/audit-remediation.md) | Qualificação e limites da auditoria |
+| [Migração da transcrição](docs/TRANSCRIPTION_MIGRATION_FINAL_REPORT.md) | Relatório técnico dos pipelines |
+| [Checklist manual](docs/MANUAL_TEST_CHECKLIST.md) | Roteiro de verificação |
+| [Design](DESIGN.md) | O sistema visual “Estúdio no ar” |
+
+<br>
 
 ## Licença
 
-Consulte o repositório para a licença aplicável. Chaves de API e dados de uso são de responsabilidade do usuário; as chaves são protegidas pelo DPAPI da conta Windows; a interface recebe apenas referências opacas.
+Consulte o repositório para a licença aplicável. Chaves de API e dados de uso são de responsabilidade de quem usa o app.
+
+<br>
+
+<p align="center">
+  <sub>Feito para quem prefere falar a digitar.</sub>
+</p>
