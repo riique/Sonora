@@ -112,7 +112,7 @@ function TitleBarButton({
       // Prevent the drag region from intercepting the click.
       onMouseDown={(e) => e.stopPropagation()}
       className={
-        "flex h-9 w-11 items-center justify-center text-[#6f706a] transition-colors duration-150 " +
+        "flex h-9 w-11 items-center justify-center text-muted transition-colors duration-150 " +
         hoverClass
       }
     >

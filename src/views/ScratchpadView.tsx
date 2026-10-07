@@ -26,7 +26,7 @@ export function ScratchpadView() {
                 <div className="flex items-start justify-between gap-6">
                   <div className="min-w-0">
                     <time className="text-[11px] tabular-nums text-muted">{new Date(note.created_at_ms).toLocaleString("pt-BR")}</time>
-                    <p className="mt-2 break-words whitespace-pre-wrap text-[14px] leading-6 text-ink">{note.text}</p>
+                    <p className="mt-2 wrap-break-word whitespace-pre-wrap text-[14px] leading-6 text-ink">{note.text}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Button size="sm" variant="ghost" onClick={() => void copy(note.text)} aria-label="Copiar nota"><Clipboard className="h-4 w-4" aria-hidden /></Button>

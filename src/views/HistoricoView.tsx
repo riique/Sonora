@@ -236,7 +236,7 @@ function PipelineInspector({ entry, devMode }: { entry: HistoryEntry; devMode: b
                 {(run.debug_info || run.attempts.some((attempt) => attempt.result.request_sanitized || attempt.result.response_sanitized)) && (
                   <details className="mt-4">
                     <summary className="cursor-pointer text-[11px] font-medium text-[#555650]">Request / resposta sanitizados</summary>
-                    <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-[8px] bg-[#252522] p-3 font-mono text-[10px] leading-4 text-[#e8e8e2]">
+                    <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap wrap-break-word rounded-[8px] bg-[#252522] p-3 font-mono text-[10px] leading-4 text-[#e8e8e2]">
                       {redactTechnicalText(run.attempts.map((attempt) => ({ provider: attempt.provider, request: attempt.result.request_sanitized, response: attempt.result.response_sanitized })))}
                     </pre>
                   </details>
@@ -501,7 +501,7 @@ export function HistoricoView() {
                   <div className="min-w-0">
                     {editingId === entry.id ? (
                       <div className="space-y-2">
-                        <textarea autoFocus value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="min-h-28 w-full rounded-[9px] border border-line bg-white px-3 py-2 text-[13px] leading-5 text-ink outline-none" aria-label="Editar transcrição" />
+                        <textarea autoFocus value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="min-h-28 w-full rounded-[9px] border border-line bg-white px-3 py-2 text-[13px] leading-5 text-ink outline-hidden" aria-label="Editar transcrição" />
                         <div className="flex gap-2"><Button size="sm" variant="primary" onClick={() => void saveEdit(entry.id)}>Salvar</Button><Button size="sm" onClick={() => setEditingId(null)}>Cancelar</Button></div>
                       </div>
                     ) : isError ? (

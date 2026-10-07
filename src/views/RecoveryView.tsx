@@ -47,7 +47,7 @@ export function RecoveryView() {
   };
   return <div className="space-y-8">
     <PageHeader title="Diagnóstico e recuperação" description="Confira a configuração local e recupere ditados sem gravar novamente." action={<Button disabled={busy} onClick={() => void refresh()}>Atualizar</Button>} />
-    {message && <p role="status" className="break-words rounded-lg border border-line p-4 text-sm">{message}</p>}
+    {message && <p role="status" className="wrap-break-word rounded-lg border border-line p-4 text-sm">{message}</p>}
     {!diagnostics ? <p role="status">Carregando diagnóstico…</p> : <>
       <section aria-labelledby="readiness-title" className="space-y-3 border-y border-line py-5">
         <h2 id="readiness-title" className="section-title">Prontidão local</h2>
@@ -67,7 +67,7 @@ export function RecoveryView() {
       <section aria-labelledby="deleted-title" className="space-y-3">
         <h2 id="deleted-title" className="section-title">Itens removidos</h2>
         <p className="text-sm text-muted">O histórico preserva o texto e o áudio dos itens removidos. Para liberar espaço na pasta atual, arquive o áudio em outra pasta. Não há limpeza automática.</p>
-        {deleted.map((entry) => <article key={entry.id} className="flex items-start justify-between gap-4 border-b border-line py-3"><p className="min-w-0 break-words text-sm">{entry.text.slice(0, 200) || entry.error_message || "Ditado sem texto"}</p><div className="flex flex-wrap gap-2">{entry.audio_path && <Button size="sm" disabled={busy || !!diagnostics?.operation} onClick={() => void archiveAudio(entry.id).catch((error) => setMessage(String(error)))}>Arquivar áudio</Button>}<Button size="sm" disabled={busy} onClick={() => void act(() => invoke("restore_history_entry", { id: entry.id }), "Item restaurado no histórico.")}>Restaurar</Button></div></article>)}
+        {deleted.map((entry) => <article key={entry.id} className="flex items-start justify-between gap-4 border-b border-line py-3"><p className="min-w-0 wrap-break-word text-sm">{entry.text.slice(0, 200) || entry.error_message || "Ditado sem texto"}</p><div className="flex flex-wrap gap-2">{entry.audio_path && <Button size="sm" disabled={busy || !!diagnostics?.operation} onClick={() => void archiveAudio(entry.id).catch((error) => setMessage(String(error)))}>Arquivar áudio</Button>}<Button size="sm" disabled={busy} onClick={() => void act(() => invoke("restore_history_entry", { id: entry.id }), "Item restaurado no histórico.")}>Restaurar</Button></div></article>)}
         {!totalDeleted && <p className="text-sm">Nenhum item removido.</p>}
         {totalDeleted > 20 && <nav aria-label="Paginação dos itens removidos" className="flex gap-3"><Button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Anterior</Button><Button disabled={offset + 20 >= totalDeleted} onClick={() => setOffset(offset + 20)}>Próxima</Button></nav>}
       </section>

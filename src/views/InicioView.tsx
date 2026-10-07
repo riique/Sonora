@@ -145,7 +145,7 @@ export function InicioView({ onNavigate }: { onNavigate: (view: ViewKey) => void
         action={<KbdCombo keys={toggleKeys} />}
       />
 
-      {error && <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 text-sm"><p className="break-words">{error}</p><Button size="sm" onClick={() => void refresh()}>Tentar novamente</Button></div>}
+      {error && <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 text-sm"><p className="wrap-break-word">{error}</p><Button size="sm" onClick={() => void refresh()}>Tentar novamente</Button></div>}
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-sm">Destino do próximo ditado
           <select className="h-9 min-w-0 rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink focus:border-[#9b9c95]" disabled={!policy || savingPolicy || recording} value={policy?.destination ?? "focused_field"} onChange={(e) => void changeOutput({ destination: e.target.value as OutputPolicyConfig["destination"] })}>

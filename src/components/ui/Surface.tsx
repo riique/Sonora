@@ -67,8 +67,8 @@ export function SkeletonRows({ count = 3 }: { count?: number }) {
         <div key={index} className="flex h-20 items-center gap-5 px-4">
           <LoaderCircle className="h-4 w-4 animate-spin text-[#9a9b94]" aria-hidden />
           <div className="flex-1 space-y-2">
-            <div className="h-2.5 w-3/5 rounded bg-[#e9e9e4]" />
-            <div className="h-2 w-2/5 rounded bg-[#efefeb]" />
+            <div className="h-2.5 w-3/5 rounded-sm bg-[#e9e9e4]" />
+            <div className="h-2 w-2/5 rounded-sm bg-[#efefeb]" />
           </div>
         </div>
       ))}

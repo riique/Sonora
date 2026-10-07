@@ -303,7 +303,7 @@ function GeralTab() {
               await setInputDevice(val);
               setDevices(await listAudioDevices());
             }}
-            className="h-10 w-full max-w-md rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink outline-none"
+            className="h-10 w-full max-w-md rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink outline-hidden"
           >
             <option value="default">Padrão do sistema</option>
             {devices.map((d) => (
@@ -637,7 +637,7 @@ function PipelinesTab() {
                             });
                           }
                         }}
-                        className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-none"
+                        className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-hidden"
                       >
                         {geminiPipelines[selectedRouteKey].provider === "meta" ? (
                           <option value="muse-voice-transcribe-1.0">Muse Voice Transcribe (1.0)</option>
@@ -675,7 +675,7 @@ function PipelinesTab() {
                             });
                           }
                         }}
-                        className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-none"
+                        className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-hidden"
                       >
                         <option value="google-ai-studio">Google AI Studio</option>
                         <option value="open-router">OpenRouter</option>
@@ -802,7 +802,7 @@ function PipelinesTab() {
                           setGeminiPipelines(next);
                           persistMode({ gemini_pipelines: next });
                         }}
-                    className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-none"
+                    className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[12px] text-ink outline-hidden"
                       >
                         <option value="large-v3-turbo">openai/whisper-large-v3-turbo</option>
                         <option value="large-v3">openai/whisper-large-v3</option>
@@ -1230,7 +1230,7 @@ function VocabularioTab() {
                   category: e.target.value as VocabularyCategory,
                 }))
               }
-              className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink outline-none"
+              className="h-10 w-full rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink outline-hidden"
             >
               {VOCAB_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
