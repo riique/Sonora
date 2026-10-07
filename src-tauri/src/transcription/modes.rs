@@ -20,7 +20,6 @@ use crate::transcription::legacy::transcribe_bytes;
 use crate::transcription::telemetry::{
     compute_realtime_factor, est_throughput, est_total_tokens, log_latency,
 };
-use crate::transcription::types::AcousticOutcome;
 
 fn provider_history_label(provider: GeminiProvider) -> &'static str {
     match provider {
