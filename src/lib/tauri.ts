@@ -39,6 +39,7 @@ export interface EngineConfigSnapshot {
 export type GeminiModel = "flash-lite35" | "flash36" | "transcribe35" | "muse-voice-transcribe-1.0";
 export type GeminiProvider = "google-ai-studio" | "open-router" | "meta";
 export type OpenRouterWhisperModel = "large-v3-turbo" | "large-v3";
+export type UltraFastProvider = "open-router" | "groq";
 export interface GeminiPipelineChoice {
   model: GeminiModel;
   provider: GeminiProvider;
@@ -47,6 +48,7 @@ export interface GeminiPipelineChoice {
   meta_languages?: string[];
 }
 export interface GeminiPipelineConfig {
+  ultra_fast_provider?: UltraFastProvider;
   ultra_fast_whisper: OpenRouterWhisperModel;
   fast_accurate: GeminiPipelineChoice;
   precise: GeminiPipelineChoice;

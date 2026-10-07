@@ -413,9 +413,9 @@ pub fn capture_foreground_target() -> ForegroundTarget {
     }
 }
 
-/// Verifies that the exact window selected at recording stop is still active
-/// when the paste is dispatched. Moving that window to another monitor keeps
-/// the same HWND and remains valid; switching applications fails closed.
+/// Verifies whether the foreground target matches an expected target.
+/// Used during undo operations (`undo_ai_edit`) to ensure the user has not switched
+/// focus away before restoring previously replaced selection text.
 pub fn foreground_delivery_target_matches(expected: ForegroundTarget) -> bool {
     #[cfg(target_os = "windows")]
     {

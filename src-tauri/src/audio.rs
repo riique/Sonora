@@ -792,14 +792,14 @@ async fn deliver_pipeline_result(state: &AppState, run: &mut crate::pipeline_run
             run.timings.clipboard_ms = Some(clipboard_started.elapsed().as_millis() as u64);
             delivery.clipboard_ok = result.is_ok();
             result.and_then(|()| {
-                if !crate::context::foreground_delivery_target_matches(expected_target) {
-                    return Err(
-                        "O campo de destino mudou. O texto foi copiado; cole com Ctrl+V.".into(),
-                    );
-                }
                 delivery.paste_attempted = true;
-                paste_into_focused_field(expected_target, Some(&state.operations))
-                    .map(|()| delivery.paste_ok = true)
+                let current_target = crate::context::capture_foreground_target();
+                if current_target.hwnd.is_some() {
+                    delivery.target_hwnd = current_target.hwnd;
+                    delivery.target_process_id = current_target.process_id;
+                    delivery.target_focus_id = current_target.focus_id;
+                }
+                paste_into_focused_field(Some(&state.operations)).map(|()| delivery.paste_ok = true)
             })
         }
     };
@@ -902,7 +902,7 @@ pub async fn undo_ai_edit(
     let same_target = crate::context::foreground_delivery_target_matches(expected);
     write_clipboard(&replacement, state.operations.permit()).await?;
     if same_target && exact_selection {
-        paste_into_focused_field(expected, Some(&state.operations))?;
+        paste_into_focused_field(Some(&state.operations))?;
         Ok(UndoAiEditOutcome::ReplacedSelection)
     } else {
         Ok(UndoAiEditOutcome::CopiedToClipboard)
@@ -1205,7 +1205,6 @@ async fn run_forced_fallback(
 /// foreground application a moment to settle and ensures the clipboard write is
 /// visible to it before the paste is dispatched.
 fn paste_into_focused_field(
-    expected: crate::context::ForegroundTarget,
     coordinator: Option<&crate::operations::Coordinator>,
 ) -> Result<(), String> {
     use enigo::{
@@ -1233,9 +1232,6 @@ fn paste_into_focused_field(
     if coordinator.is_some_and(|coordinator| coordinator.status().is_some_and(|job| job.cancelled))
     {
         return Err("Entrega cancelada".into());
-    }
-    if !crate::context::foreground_delivery_target_matches(expected) {
-        return Err("O campo de destino mudou. O texto está na área de transferência.".into());
     }
     enigo
         .key(modifier, Press)

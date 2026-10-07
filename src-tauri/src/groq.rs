@@ -86,6 +86,22 @@ pub async fn call_whisper_api(
     mime: &str,
     api_key: &str,
 ) -> Result<String, GroqNetworkError> {
+    call_whisper_api_with_model(audio_bytes, file_name, mime, WHISPER_MODEL, api_key, None).await
+}
+
+/// Same as [`call_whisper_api`] but with an explicit Whisper model id
+/// (e.g. `whisper-large-v3-turbo` or `whisper-large-v3`).
+/// Used by the UltraFast pipeline when the user selects Groq direct,
+/// keeping the model choice in sync with the OpenRouter route. `prompt`
+/// carries the vocabulary hint (Whisper biases spelling toward it).
+pub async fn call_whisper_api_with_model(
+    audio_bytes: Vec<u8>,
+    file_name: &str,
+    mime: &str,
+    model: &str,
+    api_key: &str,
+    prompt: Option<&str>,
+) -> Result<String, GroqNetworkError> {
     if api_key.trim().is_empty() {
         return Err(GroqNetworkError::MissingApiKey);
     }
@@ -101,9 +117,15 @@ pub async fn call_whisper_api(
         .file_name(file_name.to_string())
         .mime_str(mime)?;
 
-    let form = multipart::Form::new()
-        .text("model", WHISPER_MODEL.to_string())
+    let mut form = multipart::Form::new()
+        .text("model", model.to_string())
+        // Same language hint the OpenRouter route sends, so switching
+        // providers does not change transcription language behavior.
+        .text("language", "pt")
         .part("file", file_part);
+    if let Some(prompt) = prompt.filter(|prompt| !prompt.trim().is_empty()) {
+        form = form.text("prompt", prompt.to_string());
+    }
 
     let response = client
         .post(GROQ_TRANSCRIPTIONS_URL)

@@ -155,12 +155,19 @@ pub struct ModeConfigSnapshot {
     pub mode_description: String,
 }
 
-fn mode_copy(mode: TranscriptionMode) -> (&'static str, &'static str) {
+fn mode_copy(
+    mode: TranscriptionMode,
+    ultra_fast_provider: crate::pipeline_contract::UltraFastProvider,
+) -> (&'static str, &'static str) {
     match mode {
-        TranscriptionMode::UltraFast => (
-            "Ultrarrápido",
-            "Whisper via OpenRouter STT com provedor Groq fixo",
-        ),
+        TranscriptionMode::UltraFast => match ultra_fast_provider {
+            crate::pipeline_contract::UltraFastProvider::Groq => {
+                ("Ultrarrápido", "Whisper direto via Groq")
+            }
+            crate::pipeline_contract::UltraFastProvider::OpenRouter => {
+                ("Ultrarrápido", "Whisper via OpenRouter STT (Groq)")
+            }
+        },
         TranscriptionMode::FastAccurate => ("Rápido e preciso", "Transcrição direta com Gemini"),
         TranscriptionMode::Precise => ("Preciso", "Whisper e Gemini em paralelo"),
         TranscriptionMode::UltraPrecise => {
@@ -172,13 +179,14 @@ fn mode_copy(mode: TranscriptionMode) -> (&'static str, &'static str) {
 #[tauri::command]
 pub fn get_mode_config(state: State<'_, SharedState>) -> ModeConfigSnapshot {
     let mode = *state.transcription_mode.read();
-    let (label, desc) = mode_copy(mode);
+    let pipelines = state.gemini_pipelines.read().clone();
+    let (label, desc) = mode_copy(mode, pipelines.ultra_fast_provider);
     ModeConfigSnapshot {
         modes_enabled: *state.modes_enabled.read(),
         mode,
         gemini_fallback_to_whisper: *state.gemini_fallback_to_whisper.read(),
         file_tagging_enabled: *state.file_tagging_enabled.read(),
-        gemini_pipelines: state.gemini_pipelines.read().clone(),
+        gemini_pipelines: pipelines,
         mode_label: label.to_string(),
         mode_description: desc.to_string(),
     }
@@ -222,7 +230,7 @@ pub async fn update_mode_config(
         *shared.file_tagging_enabled.write() = payload.file_tagging_enabled;
         *shared.gemini_pipelines.write() = payload.gemini_pipelines.clone();
 
-        let (label, desc) = mode_copy(payload.mode);
+        let (label, desc) = mode_copy(payload.mode, payload.gemini_pipelines.ultra_fast_provider);
         Ok(ModeConfigSnapshot {
             modes_enabled: true,
             mode: payload.mode,

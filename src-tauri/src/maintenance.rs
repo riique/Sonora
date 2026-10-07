@@ -52,7 +52,14 @@ pub fn diagnostics(state: &AppState) -> Diagnostics {
     let routes = state.gemini_pipelines.read();
     let mut required = vec![];
     if mode == TranscriptionMode::UltraFast {
-        required.push(("OpenRouter", keys.openrouter.is_empty()));
+        match routes.ultra_fast_provider {
+            crate::pipeline_contract::UltraFastProvider::Groq => {
+                required.push(("Groq", keys.groq.is_empty()));
+            }
+            crate::pipeline_contract::UltraFastProvider::OpenRouter => {
+                required.push(("OpenRouter", keys.openrouter.is_empty()));
+            }
+        }
     } else {
         let route = match mode {
             TranscriptionMode::FastAccurate => &routes.fast_accurate,
