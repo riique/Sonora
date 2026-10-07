@@ -31,7 +31,8 @@ export const MODE_LABELS: Record<string, string> = {
 export function routeSummary(config: ModeConfigSnapshot | null): string {
   if (!config) return "";
   if (config.mode === "ultra-fast") {
-    return `${config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo"} via Groq`;
+    const whisper = config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo";
+    return config.gemini_pipelines.ultra_fast_provider === "groq" ? `${whisper} direto na Groq` : `${whisper} via OpenRouter (Groq)`;
   }
   const key = config.mode === "fast-accurate" ? "fast_accurate" : config.mode === "precise" ? "precise" : "ultra_precise";
   const route = config.gemini_pipelines[key];

@@ -28,7 +28,7 @@ if ($legacy -and ($legacy.InstallLocation.Trim('"') -ne $legacyDirectory -or $le
 
 # Stop only the two known product executables, never a process selected by name alone.
 Get-Process -Name 'haumea-voice','sonora' -ErrorAction SilentlyContinue |
-    Where-Object { $_.Path -in @($legacyExe, $sonoraExe) } |
+    Where-Object { $_.Path -in @($legacyExe, $sonoraExe) -or $_.Path -like "*\Sonora\sonora.exe" -or $_.Path -like "*\Haumea Voice\haumea-voice.exe" } |
     ForEach-Object { Stop-Process -Id $_.Id; $_.WaitForExit(10000) | Out-Null }
 New-Item -ItemType Directory -Path $backup | Out-Null
 foreach ($pair in @(@($dataDirectory,'RoamingData'), @($localDataDirectory,'LocalData'), @($legacyDirectory,'LegacyApplication'), @($sonoraDirectory,'SonoraApplication'))) {
@@ -38,7 +38,7 @@ Copy-Item -LiteralPath $installer -Destination $backup
 $before = @{}
 if (Test-Path -LiteralPath $dataDirectory) {
     Get-ChildItem -LiteralPath $dataDirectory -Recurse -File -Force | ForEach-Object {
-        $relative = [IO.Path]::GetRelativePath($dataDirectory, $_.FullName)
+        $relative = $_.FullName.Substring($dataDirectory.Length).TrimStart('\', '/')
         $before[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
     }
 }
@@ -46,6 +46,21 @@ $before | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $backup 
 
 $installed = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
 if ($installed.ExitCode -ne 0) { throw "Sonora installer failed: $($installed.ExitCode). Backup: $backup" }
+if (-not (Test-Path -LiteralPath $sonoraExe)) {
+    $redirected = $null
+    if ($env:LOCALAPPDATA) {
+        $packagesDir = Join-Path $env:LOCALAPPDATA 'Packages'
+        if (Test-Path -LiteralPath $packagesDir) {
+            $redirected = Get-ChildItem -Path $packagesDir -Filter 'sonora.exe' -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -like "*\LocalCache\Local\Sonora\sonora.exe" } |
+                Select-Object -ExpandProperty FullName -First 1
+        }
+    }
+    if ($redirected -and (Test-Path -LiteralPath $redirected)) {
+        $sonoraExe = $redirected
+        $sonoraDirectory = Split-Path -Parent $redirected
+    }
+}
 if (-not (Test-Path -LiteralPath $sonoraExe)) { throw "Sonora executable missing. Backup: $backup" }
 $version = (Get-Item -LiteralPath $sonoraExe).VersionInfo.ProductVersion
 if ($version -notin @($releaseVersion, "$releaseVersion.0")) { throw "Unexpected installed version: $version" }
@@ -100,10 +115,23 @@ $changed = @($before.Keys | Where-Object {
     -not (Test-Path -LiteralPath $path) -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $before[$_]
 })
 if ($changed.Count) { throw "$($changed.Count) original data files changed during installation. Backup: $backup" }
-$registration = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Sonora'
-if ($registration.DisplayVersion -ne $releaseVersion) { throw 'Installed registry version does not match.' }
+$registration = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Sonora' -ErrorAction SilentlyContinue
+if (-not $registration) {
+    $registration = Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\com.haumeavoice.app' -ErrorAction SilentlyContinue
+}
+if (-not $registration) {
+    $registration = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall' -ErrorAction SilentlyContinue |
+        ForEach-Object { Get-ItemProperty $_.PsPath } |
+        Where-Object { $_.DisplayName -eq 'Sonora' } |
+        Select-Object -First 1
+}
+if (-not $registration -or $registration.DisplayVersion -ne $releaseVersion) { throw 'Installed registry version does not match.' }
 if (Test-Path -LiteralPath $legacyRegistry) { throw 'Legacy uninstall entry remains; inspect the backup and registration.' }
 $report = @{ version = $version; installerExit = $installed.ExitCode; preservedDataFiles = $before.Count; nativeHostsUpdated = $hostCount; backup = $backup; executable = $sonoraExe }
 $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $backup 'installation-report.json') -Encoding utf8
-Start-Process -FilePath $sonoraExe
+try {
+    Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $sonoraExe } | Out-Null
+} catch {
+    Start-Process -FilePath $sonoraExe
+}
 $report | ConvertTo-Json

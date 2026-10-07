@@ -240,6 +240,23 @@ impl GeminiPipelineChoice {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum UltraFastProvider {
+    #[default]
+    OpenRouter,
+    Groq,
+}
+
+impl UltraFastProvider {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenRouter => "open-router",
+            Self::Groq => "groq",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum OpenRouterWhisperModel {
     #[default]
     LargeV3Turbo,
@@ -253,11 +270,24 @@ impl OpenRouterWhisperModel {
             Self::LargeV3 => "openai/whisper-large-v3",
         }
     }
+
+    /// Groq direct model id for the same Whisper variant.
+    /// Both ids are served by the Groq Audio Transcriptions endpoint.
+    pub fn groq_id(self) -> &'static str {
+        match self {
+            Self::LargeV3Turbo => "whisper-large-v3-turbo",
+            Self::LargeV3 => "whisper-large-v3",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeminiPipelineConfig {
-    /// The UltraFast pipeline always uses OpenRouter's dedicated STT endpoint.
+    /// Transport for the UltraFast pipeline: OpenRouter STT (pinned to Groq)
+    /// or Groq Audio Transcriptions directly. Old installs without this field
+    /// default to OpenRouter, preserving current behavior.
+    #[serde(default)]
+    pub ultra_fast_provider: UltraFastProvider,
     #[serde(default)]
     pub ultra_fast_whisper: OpenRouterWhisperModel,
     #[serde(default)]
@@ -1493,6 +1523,42 @@ mod tests {
         assert_eq!(
             OpenRouterWhisperModel::LargeV3.openrouter_id(),
             "openai/whisper-large-v3"
+        );
+    }
+
+    #[test]
+    fn whisper_presets_resolve_to_matching_groq_model_ids() {
+        assert_eq!(
+            OpenRouterWhisperModel::LargeV3Turbo.groq_id(),
+            "whisper-large-v3-turbo"
+        );
+        assert_eq!(
+            OpenRouterWhisperModel::LargeV3.groq_id(),
+            "whisper-large-v3"
+        );
+    }
+
+    #[test]
+    fn ultra_fast_provider_defaults_to_openrouter_for_old_installs() {
+        assert_eq!(UltraFastProvider::default(), UltraFastProvider::OpenRouter);
+        assert_eq!(UltraFastProvider::OpenRouter.as_str(), "open-router");
+        assert_eq!(UltraFastProvider::Groq.as_str(), "groq");
+        // Old settings.json has no ultra_fast_provider → OpenRouter (current behavior).
+        let parsed: GeminiPipelineConfig =
+            serde_json::from_str(r#"{"ultra_fast_whisper":"large-v3-turbo"}"#).unwrap();
+        assert_eq!(parsed.ultra_fast_provider, UltraFastProvider::OpenRouter);
+        assert_eq!(
+            parsed.ultra_fast_whisper,
+            OpenRouterWhisperModel::LargeV3Turbo
+        );
+        let parsed_groq: GeminiPipelineConfig = serde_json::from_str(
+            r#"{"ultra_fast_provider":"groq","ultra_fast_whisper":"large-v3"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed_groq.ultra_fast_provider, UltraFastProvider::Groq);
+        assert_eq!(
+            parsed_groq.ultra_fast_whisper,
+            OpenRouterWhisperModel::LargeV3
         );
     }
 

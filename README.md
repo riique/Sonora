@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.0.1" src="https://img.shields.io/badge/vers%C3%A3o-2.0.1-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.1.0" src="https://img.shields.io/badge/vers%C3%A3o-2.1.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
@@ -47,6 +47,7 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 ## Novidades desta versão
 
+- **Ultrarrápido com provedor à escolha:** OpenRouter (Groq fixo) ou Groq direto com a sua chave, com o mesmo modelo Whisper, o mesmo vocabulário e o mesmo refino.
 - **Refinar com IA no Ultrarrápido:** uma passada rápida de IA aplica vocabulário, estilo do aplicativo e contexto autorizado ao texto do Whisper. Pode ser desligada em Ajustes › Transcrição.
 - **Comando de voz (`Ctrl+Shift+B`):** selecione um texto, aperte o atalho e diga o que fazer (“deixa mais formal”, “traduz para inglês”). Sem seleção, o Sonora escreve o que você pedir.
 - **Segurar para falar:** em Ajustes › Geral › Atalhos, escolha entre apertar para alternar ou segurar enquanto fala.
@@ -61,7 +62,7 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 1. Uma única vez: em *Settings › Secrets and variables › Actions* do repositório, crie `TAURI_SIGNING_PRIVATE_KEY` (conteúdo da chave privada do updater) e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave pública correspondente está em `src-tauri/tauri.conf.json`.
 2. Suba a versão em `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e no topo deste README.
-3. Crie e envie a tag: `git tag v2.1.0 && git push origin v2.1.0`.
+3. Crie e envie a tag da versão, por exemplo `git tag v2.1.1 && git push origin v2.1.1`.
 
 O workflow **Release** gera o instalador assinado e o `latest.json`; as instalações existentes encontram a versão nova sozinhas.
 
@@ -92,12 +93,12 @@ Escolha o equilíbrio entre velocidade e precisão em **Configurações**. Cada 
 
 | Modo | Fluxo | Sanitizer | Fallback típico |
 |:--|:--|:--:|:--|
-| **Ultrarrápido** | OpenRouter STT → Whisper (Groq fixo) | — | — |
+| **Ultrarrápido** | Whisper via OpenRouter STT (Groq) ou Groq direto | — | — |
 | **Rápido e preciso** | Gemini (Files API ou inline) | — | Whisper (configurável) |
 | **Preciso** | Whisper ∥ upload → refine Gemini | — | Whisper ou Gemini puro |
 | **Ultrapreciso** | Whisper ∥ upload → sanitizer → Gemini | JSON | Texto sanitizado ou Whisper |
 
-No Ultrarrápido, escolha entre `openai/whisper-large-v3-turbo` e `openai/whisper-large-v3`, sempre pelo provedor Groq no OpenRouter. No OpenRouter, Chat Completions multimodal e Speech-to-Text dedicado são roteados separadamente.
+No Ultrarrápido, escolha entre `whisper-large-v3-turbo` e `whisper-large-v3`, pelo OpenRouter (Groq fixo) ou direto na Groq com a sua chave. No OpenRouter, Chat Completions multimodal e Speech-to-Text dedicado são roteados separadamente.
 
 **Prompt universal.** Os modelos Gemini multimodais recebem uma única `systemInstruction` que trata, trecho a trecho, conversa comum, programação e conteúdo acadêmico. Não é preciso escolher um tipo de conteúdo antes de falar.
 

@@ -33,7 +33,7 @@ test("AI generation waits for explicit confirmation and survives failure", async
   await act(async () => root.render(<VoiceInsights data={data} reload={reload} developerMode={false} />));
   await act(async () => host.querySelector<HTMLButtonElement>(".voice-portrait button")!.click());
   expect(host.querySelector<HTMLDialogElement>("dialog")?.open).toBe(true);
-  expect(host.querySelector("dialog")?.textContent).toContain("meta/muse-spark-1.2-contributor");
+  expect(host.querySelector("dialog")?.textContent).toContain("meta/muse-spark-1.3-contributor");
   expect(bridge.invoke).not.toHaveBeenCalled();
   await act(async () => host.querySelectorAll<HTMLButtonElement>("dialog button")[1].click());
   expect(bridge.invoke).toHaveBeenCalledWith("generate_ai_voice_profile");

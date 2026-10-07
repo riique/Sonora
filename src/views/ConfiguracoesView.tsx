@@ -32,6 +32,7 @@ import {
   type GeminiPipelineChoice,
   type GeminiPipelineConfig,
   type OpenRouterWhisperModel,
+  type UltraFastProvider,
   type VocabularyTerm,
   type VocabularyCategory,
   type WidgetVisibilityMode,
@@ -301,7 +302,7 @@ function GeralTab() {
 /* ------------------------------- Transcrição ------------------------------- */
 
 const MODES: { id: TranscriptionMode; title: string; engine: string; blurb: string }[] = [
-  { id: "ultra-fast", title: "Ultrarrápido", engine: "Whisper via Groq", blurb: "Menor latência" },
+  { id: "ultra-fast", title: "Ultrarrápido", engine: "Whisper", blurb: "Menor latência" },
   { id: "fast-accurate", title: "Rápido e preciso", engine: "Modelo de áudio", blurb: "Boa precisão com menos etapas" },
   { id: "precise", title: "Preciso", engine: "Whisper + Gemini", blurb: "Melhor equilíbrio geral" },
   { id: "ultra-precise", title: "Ultrapreciso", engine: "Whisper → validador → Gemini", blurb: "Para conteúdo importante" },
@@ -334,6 +335,7 @@ function TranscricaoTab() {
   const { features, update: updateFeatures, error: featuresError } = useFeatures();
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [geminiPipelines, setGeminiPipelines] = useState<GeminiPipelineConfig>({
+    ultra_fast_provider: "open-router",
     ultra_fast_whisper: "large-v3-turbo",
     fast_accurate: { model: "flash-lite35", provider: "google-ai-studio", use_custom_model: false, custom_model: "" },
     precise: { model: "flash-lite35", provider: "google-ai-studio", use_custom_model: false, custom_model: "" },
@@ -358,7 +360,10 @@ function TranscricaoTab() {
         setMode(m.mode);
         setGeminiFallback(m.gemini_fallback_to_whisper);
         setFileTaggingEnabled(m.file_tagging_enabled);
-        setGeminiPipelines(m.gemini_pipelines);
+        setGeminiPipelines({
+          ultra_fast_provider: "open-router",
+          ...m.gemini_pipelines,
+        });
       })
       .catch(console.error);
     getEngineConfig()
@@ -513,7 +518,29 @@ function TranscricaoTab() {
         ) : (
           <>
             <RowGroup>
-              <PreferenceRow title="Modelo Whisper" description="Endpoint de transcrição do OpenRouter, com o Groq fixo e sem fallback." htmlFor="ultra-fast-whisper-model">
+              <PreferenceRow
+                title="Provedor"
+                description={
+                  (geminiPipelines.ultra_fast_provider ?? "open-router") === "groq"
+                    ? "Endpoint de transcrição da Groq, com a sua chave Groq. Sem passar pelo OpenRouter."
+                    : "Endpoint de transcrição do OpenRouter, com o Groq fixo e sem fallback. Usa a chave do OpenRouter."
+                }
+              >
+                <Segmented<UltraFastProvider>
+                  label="Provedor do Ultrarrápido"
+                  value={geminiPipelines.ultra_fast_provider ?? "open-router"}
+                  onChange={(value) => {
+                    const next = { ...geminiPipelines, ultra_fast_provider: value };
+                    setGeminiPipelines(next);
+                    persistMode({ gemini_pipelines: next });
+                  }}
+                  options={[
+                    { value: "open-router", label: "OpenRouter" },
+                    { value: "groq", label: "Groq direto" },
+                  ]}
+                />
+              </PreferenceRow>
+              <PreferenceRow title="Modelo Whisper" description="A mesma variante nos dois provedores." htmlFor="ultra-fast-whisper-model">
                 <Select
                   id="ultra-fast-whisper-model"
                   className="w-[240px] font-mono text-[12px]"
