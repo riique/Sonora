@@ -1,74 +1,57 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import {
-  ArrowRight,
-  FileText,
-  Settings2,
-  Zap,
-} from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { KbdCombo } from "../components/ui/Kbd";
-import { PageHeader, SkeletonRows } from "../components/ui/Surface";
+import { KbdCombo, shortcutKeys } from "../components/ui/Kbd";
+import { ErrorState, SkeletonRows } from "../components/ui/Surface";
+import { formatDuration, shortStamp } from "../lib/format";
+import { LogRow } from "../components/ui/LogRow";
 import {
   getHistoryPage,
   getModeConfig,
   getOutputPolicyConfig,
-  setOutputPolicyConfig,
-  type OutputPolicyConfig,
-  getRecordingStatus,
   getShortcuts,
-  onRecordingEvent,
+  setOutputPolicyConfig,
   type HistoryEntry,
   type ModeConfigSnapshot,
+  type OutputPolicyConfig,
   type ShortcutConfig,
 } from "../lib/tauri";
-import { shouldApplyRecordingStatus } from "../recording/status";
-import type { ViewKey } from "./index";
+import { formatClock, Tally, useElapsed, type OnAirState } from "../recording/useOnAir";
+import type { Navigate } from "./index";
 
-const MODE_LABELS: Record<string, string> = {
+export const MODE_LABELS: Record<string, string> = {
   "ultra-fast": "Ultrarrápido",
   "fast-accurate": "Rápido e preciso",
   precise: "Preciso",
   "ultra-precise": "Ultrapreciso",
 };
 
-function formatEntryDuration(ms?: number): string {
-  if (!ms) return "—";
-  const seconds = Math.max(1, Math.round(ms / 1000));
-  const minutes = Math.floor(seconds / 60);
-  return minutes ? `${minutes}:${String(seconds % 60).padStart(2, "0")}` : `${seconds}s`;
-}
-
-function routeDetails(config: ModeConfigSnapshot | null) {
-  if (!config) return { engine: "Carregando…", model: "—", provider: "—" };
+/** One readable line describing the active route: model and provider. */
+export function routeSummary(config: ModeConfigSnapshot | null): string {
+  if (!config) return "";
   if (config.mode === "ultra-fast") {
-    return {
-      engine: "Whisper · baixa latência",
-      model: config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo",
-      provider: "OpenRouter · Groq",
-    };
+    return `${config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo"} via Groq`;
   }
-  const key =
-    config.mode === "fast-accurate"
-      ? "fast_accurate"
-      : config.mode === "precise"
-        ? "precise"
-        : "ultra_precise";
+  const key = config.mode === "fast-accurate" ? "fast_accurate" : config.mode === "precise" ? "precise" : "ultra_precise";
   const route = config.gemini_pipelines[key];
-  return {
-    engine: config.mode === "fast-accurate" ? (route.provider === "meta" ? "Muse com áudio WAV" : "Modelo de áudio") : config.mode === "precise" ? "Whisper + Gemini" : "Whisper + validador + Gemini",
-    model: route.provider === "meta" ? (route.custom_model || "Muse Voice Transcribe 1.0") : route.use_custom_model
+  if (!route) return "";
+  const model = route.provider === "meta"
+    ? route.custom_model || "Muse Voice Transcribe 1.0"
+    : route.use_custom_model
       ? route.custom_model || "Modelo customizado"
-      : route.model === "transcribe35"
-        ? "Gemini 3.5 Transcribe"
-        : route.model === "flash36"
-          ? "Gemini 3.6 Flash"
-          : "Gemini 3.5 Flash-Lite",
-    provider: route.provider === "meta" ? "Meta Model API" : route.provider === "open-router" ? "OpenRouter" : "Google AI Studio",
-  };
+      : route.model === "transcribe35" ? "Gemini 3.5 Transcribe" : route.model === "flash36" ? "Gemini 3.6 Flash" : "Gemini 3.5 Flash-Lite";
+  const provider = route.provider === "meta" ? "Meta" : route.provider === "open-router" ? "OpenRouter" : "Google AI Studio";
+  return `${model} via ${provider}`;
 }
 
-export function InicioView({ onNavigate }: { onNavigate: (view: ViewKey) => void }) {
+const HEADLINE: Record<OnAirState, string> = {
+  off: "Pronto para ditar",
+  live: "No ar",
+  standby: "Processando o ditado",
+};
+
+export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate; onAir?: OnAirState }) {
   const [totals, setTotals] = useState({ count: 0, words: 0 });
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [policy, setPolicy] = useState<OutputPolicyConfig | null>(null);
@@ -76,9 +59,7 @@ export function InicioView({ onNavigate }: { onNavigate: (view: ViewKey) => void
   const [error, setError] = useState("");
   const [pipeline, setPipeline] = useState<ModeConfigSnapshot | null>(null);
   const [shortcuts, setShortcutsState] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q" });
-  const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(true);
-  const latestRecordingRevision = useRef(-1);
 
   const refresh = async () => {
     try {
@@ -88,161 +69,158 @@ export function InicioView({ onNavigate }: { onNavigate: (view: ViewKey) => void
       setHistory(entries.items);
       setTotals({ count: entries.total, words: entries.total_words });
       setPipeline(config);
-    } catch (error) {
-      setError(String(error));
+    } catch (failure) {
+      setError(String(failure));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-    let unlistenRecording: (() => void) | undefined;
-    const applyRecordingStatus = (status: Awaited<ReturnType<typeof getRecordingStatus>>) => {
-      if (!mounted || !shouldApplyRecordingStatus(latestRecordingRevision.current, status)) return;
-      latestRecordingRevision.current = status.revision;
-      setRecording(status.recording);
-    };
-
     void refresh();
     getShortcuts().then(setShortcutsState).catch(() => {});
     const saved = listen("transcription-saved", refresh);
-    void onRecordingEvent((_type, status) => applyRecordingStatus(status))
-      .then(async (unlisten) => {
-        if (!mounted) {
-          unlisten();
-          return;
-        }
-        unlistenRecording = unlisten;
-        applyRecordingStatus(await getRecordingStatus());
-      })
-      .catch((error) => console.error("Failed to sync recording status:", error));
     return () => {
-      mounted = false;
-      saved.then((unlisten) => unlisten());
-      unlistenRecording?.();
+      void saved.then((unlisten) => unlisten());
     };
   }, []);
 
   const changeOutput = async (change: Partial<Pick<OutputPolicyConfig, "destination" | "temporary_override">>) => {
-    if (savingPolicy) return; setSavingPolicy(true); setError("");
-    try { const current = await getOutputPolicyConfig(); setPolicy(await setOutputPolicyConfig({ ...current, ...change })); }
-    catch (failure) { setError(String(failure)); }
-    finally { setSavingPolicy(false); }
+    if (savingPolicy) return;
+    setSavingPolicy(true);
+    setError("");
+    try {
+      const current = await getOutputPolicyConfig();
+      setPolicy(await setOutputPolicyConfig({ ...current, ...change }));
+    } catch (failure) {
+      setError(String(failure));
+    } finally {
+      setSavingPolicy(false);
+    }
   };
 
-  const details = routeDetails(pipeline);
-  const recent = history.slice(0, 3);
-  const toggleKeys = shortcuts.toggle
-    .split("+")
-    .map((key) => (key === "Control" || key === "CommandOrControl" ? "Ctrl" : key));
+  const recording = onAir !== "off";
+  const elapsed = useElapsed(onAir);
+  const enabledProfiles = policy?.profiles.filter((profile) => profile.enabled) ?? [];
+  const toggleKeys = shortcutKeys(shortcuts.toggle);
+  const cancelKeys = shortcutKeys(shortcuts.cancel);
 
   return (
     <div>
-      <PageHeader
-        title="Sonora"
-        description="Comece a falar em qualquer aplicativo com o atalho global."
-        action={<KbdCombo keys={toggleKeys} />}
-      />
-
-      {error && <div role="alert" className="mb-5 flex flex-wrap items-center gap-3 text-sm"><p className="wrap-break-word">{error}</p><Button size="sm" onClick={() => void refresh()}>Tentar novamente</Button></div>}
-      <div className="mb-6 flex flex-wrap items-end gap-4">
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-sm">Destino do próximo ditado
-          <select className="h-9 min-w-0 rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink focus:border-[#9b9c95]" disabled={!policy || savingPolicy || recording} value={policy?.destination ?? "focused_field"} onChange={(e) => void changeOutput({ destination: e.target.value as OutputPolicyConfig["destination"] })}>
-            <option value="focused_field">Campo em foco</option><option value="clipboard_only">Área de transferência</option><option value="scratchpad">Scratchpad</option>
-          </select>
-        </label>
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-sm">Style temporário
-          <select className="h-9 min-w-0 rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink focus:border-[#9b9c95]" disabled={!policy || savingPolicy || recording} value={policy?.temporary_override ?? ""} onChange={(e) => void changeOutput({ temporary_override: e.target.value || null })}>
-            <option value="">Automático por aplicativo</option>{policy?.profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-          </select>
-        </label>
-        <Button onClick={() => onNavigate("recuperacao")}>Verificar configuração</Button>
-      </div>
-
-      {recording && (
-        <div className="mb-6 flex items-center gap-2 rounded-[10px] bg-[#fff1ef] px-4 py-3 text-[13px] font-medium text-[#9f2720]" role="status">
-          <span className="h-2 w-2 rounded-full bg-[#c2392f] animate-quiet-pulse" />
-          Gravação em andamento no gadget
+      <section aria-labelledby="ready-title" className="pt-4">
+        <div className="flex items-center gap-3">
+          <Tally state={onAir} size="lg" />
+          <h1 id="ready-title" className="page-title text-[32px]" aria-live="polite">{HEADLINE[onAir]}</h1>
+          {onAir === "live" && <span className="ml-1 font-mono text-[32px] font-medium tabular-nums tracking-[-0.02em] text-live" role="timer" aria-label="Tempo de gravação">{formatClock(elapsed)}</span>}
         </div>
-      )}
-
-      <section className="surface px-6 py-5" aria-labelledby="active-pipeline">
-        <div className="flex items-start justify-between gap-5">
-          <div className="min-w-0">
-            <h2 id="active-pipeline" className="meta-label">Pipeline ativa</h2>
-            <div className="mt-2 flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-[#efefeb] text-ink">
-                <Zap className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-              </span>
-              <div>
-                <p className="text-[17px] font-semibold tracking-[-0.015em] text-ink">
-                  {MODE_LABELS[pipeline?.mode ?? ""] ?? "Carregando…"}
-                </p>
-                <p className="mt-0.5 text-[12px] text-muted">{details.engine}</p>
-              </div>
-            </div>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => onNavigate("configuracoes")}>
-            <Settings2 className="h-3.5 w-3.5" aria-hidden />
-            Configurar
-          </Button>
+        <p className="mt-3 max-w-[56ch] text-[14px] leading-6 text-muted">
+          {onAir === "live"
+            ? <>Fale normalmente. Pressione o atalho de novo para encerrar ou <KbdCombo keys={cancelKeys} /> para cancelar.</>
+            : "Pressione o atalho em qualquer aplicativo e comece a falar. O texto é colado onde estiver o cursor."}
+        </p>
+        <div className="mt-8">
+          <KbdCombo keys={toggleKeys} size="lg" />
         </div>
-        <dl className="mt-5 grid grid-cols-3 divide-x divide-line border-t border-line pt-4 max-[980px]:grid-cols-1 max-[980px]:divide-x-0 max-[980px]:divide-y">
-          <PipelineFact label="Modelo" value={details.model} />
-          <PipelineFact label="Provedor" value={details.provider} />
-          <PipelineFact label="FileTagging" value={pipeline ? (pipeline.file_tagging_enabled ? "Ativo" : "Desativado") : "Carregando…"} />
-        </dl>
       </section>
 
-      <section className="mt-8" aria-labelledby="recent-activity">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 id="recent-activity" className="section-title">Atividade recente <span className="text-sm font-normal text-muted">· {totals.count.toLocaleString("pt-BR")} ditados</span></h2>
-          <Button variant="ghost" size="sm" onClick={() => onNavigate("historico")}>
-            Ver histórico <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Button>
-        </div>
-        <div className="surface">
-          {loading ? (
-            <SkeletonRows count={3} />
-          ) : recent.length ? (
-            <div className="divider-list">
-              {recent.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => onNavigate("historico")}
-                  className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-[#fafaf8] first:rounded-t-[14px] last:rounded-b-[14px]"
-                >
-                  <FileText className="h-4 w-4 shrink-0 text-[#7a7b74]" strokeWidth={1.7} aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <p className={`truncate text-[13px] font-medium ${entry.is_error ? "text-[#a72a21]" : "text-ink"}`}>
-                      {entry.is_error ? entry.error_message || "Falha na transcrição" : entry.text || "Transcrição sem texto"}
-                    </p>
-                    <p className="mt-1 truncate text-[11px] text-muted">{entry.date}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted">{formatEntryDuration(entry.duration_ms)}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="px-5 py-10 text-center">
-              <p className="text-[13px] font-medium text-ink">Nenhuma atividade ainda</p>
-              <p className="mt-1 text-[12px] text-muted">Use {toggleKeys.join(" + ")} para criar sua primeira transcrição.</p>
-            </div>
+      {error && <div className="mt-10"><ErrorState><p>{error}</p><button type="button" className="mt-1 font-medium underline" onClick={() => void refresh()}>Tentar novamente</button></ErrorState></div>}
+
+      <section aria-labelledby="next-take" className="mt-14 border-t border-line pt-6">
+        <h2 id="next-take" className="sr-only">Próximo ditado</h2>
+        <p className="max-w-[72ch] text-[14px] leading-[2.1] text-muted">
+          O próximo ditado será{" "}
+          <label className="inline-flex">
+            <span className="sr-only">Destino do próximo ditado</span>
+            <InlineSelect
+              disabled={!policy || savingPolicy || recording}
+              value={policy?.destination ?? "focused_field"}
+              onChange={(value) => void changeOutput({ destination: value as OutputPolicyConfig["destination"] })}
+              options={[["focused_field", "colado no campo em foco"], ["clipboard_only", "apenas copiado"], ["scratchpad", "salvo como nota"]]}
+            />
+          </label>
+          {enabledProfiles.length > 0 && (
+            <>
+              , com estilo{" "}
+              <label className="inline-flex">
+                <span className="sr-only">Estilo do próximo ditado</span>
+                <InlineSelect
+                  disabled={!policy || savingPolicy || recording}
+                  value={policy?.temporary_override ?? ""}
+                  onChange={(value) => void changeOutput({ temporary_override: value || null })}
+                  options={[["", "automático por aplicativo"], ...enabledProfiles.map((profile) => [profile.id, profile.name] as [string, string])]}
+                />
+              </label>
+            </>
+          )}
+          , no modo <span className="font-medium text-ink">{MODE_LABELS[pipeline?.mode ?? ""] ?? "…"}</span>
+          {routeSummary(pipeline) && <span> ({routeSummary(pipeline)})</span>}.{" "}
+          <button
+            type="button"
+            onClick={() => onNavigate("ajustes", "transcricao")}
+            className="font-medium text-ink underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-ink"
+          >
+            Alterar modo
+          </button>
+        </p>
+      </section>
+
+      <section className="mt-14" aria-labelledby="recent-activity">
+        <div className="mb-2 flex items-end justify-between gap-4">
+          <div>
+            <h2 id="recent-activity" className="section-title">Últimos ditados</h2>
+            {totals.count > 0 && (
+              <p className="meta-label mt-1 tabular-nums">
+                {totals.count.toLocaleString("pt-BR")} ditados · {totals.words.toLocaleString("pt-BR")} palavras no total
+              </p>
+            )}
+          </div>
+          {totals.count > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => onNavigate("historico")}>
+              Ver histórico <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            </Button>
           )}
         </div>
+        {loading ? (
+          <SkeletonRows count={3} />
+        ) : history.length ? (
+          <ul className="hairline-list border-y border-line">
+            {history.map((entry) => (
+              <LogRow
+                key={entry.id}
+                time={shortStamp(entry.date)}
+                duration={formatDuration(entry.duration_ms)}
+                onOpen={() => onNavigate("historico")}
+              >
+                <span className={"line-clamp-1 text-[13.5px] " + (entry.is_error ? "text-live" : "text-ink")}>
+                  {entry.is_error ? entry.error_message || "Falha na transcrição" : entry.text || "Transcrição sem texto"}
+                </span>
+              </LogRow>
+            ))}
+          </ul>
+        ) : (
+          <div className="border-y border-line py-10">
+            <p className="text-[13px] font-medium text-ink">Nenhum ditado ainda</p>
+            <p className="mt-1 text-[13px] text-muted">Seu primeiro ditado aparece aqui assim que você usar {toggleKeys.join(" + ")}.</p>
+          </div>
+        )}
       </section>
-
     </div>
   );
 }
 
-function PipelineFact({ label, value }: { label: string; value: string }) {
+/** A select that reads as part of a sentence: underlined value, no box. */
+function InlineSelect({ value, options, onChange, disabled }: { value: string; options: [string, string][]; onChange: (value: string) => void; disabled?: boolean }) {
   return (
-    <div className="min-w-0 px-5 first:pl-0 last:pr-0 max-[980px]:px-0 max-[980px]:py-3 max-[980px]:first:pt-0">
-      <dt className="text-[11px] text-muted">{label}</dt>
-      <dd className="mt-1 truncate text-[13px] font-medium text-ink" title={value}>{value}</dd>
-    </div>
+    <span className="relative inline-flex items-center">
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="cursor-pointer appearance-none rounded-[4px] bg-transparent pr-[18px] font-medium text-ink underline decoration-line-strong decoration-1 underline-offset-4 transition-colors hover:decoration-ink disabled:cursor-not-allowed disabled:opacity-60 [&>option]:bg-raised [&>option]:text-ink"
+      >
+        {options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-muted" aria-hidden />
+    </span>
   );
 }

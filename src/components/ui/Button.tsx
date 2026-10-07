@@ -4,15 +4,15 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "border border-[#1d1d1b] bg-[#1d1d1b] text-white hover:bg-black",
-  secondary: "border border-line bg-white text-[#292a27] hover:border-line-strong hover:bg-[#f4f4f0]",
-  ghost: "border border-transparent bg-transparent text-[#555650] hover:bg-[#ecece7] hover:text-ink",
-  danger: "border border-transparent bg-transparent text-[#a72a21] hover:bg-[#fff1ef]",
+  primary: "border border-ink bg-ink text-canvas hover:bg-strong hover:border-strong",
+  secondary: "border border-line bg-raised text-ink hover:border-line-strong hover:bg-fill",
+  ghost: "border border-transparent bg-transparent text-soft hover:bg-fill hover:text-ink",
+  danger: "border border-transparent bg-transparent text-live hover:bg-live-wash",
 };
 
 const SIZES: Record<Size, string> = {
-  sm: "h-8 rounded-[8px] px-3 text-[12px]",
-  md: "h-10 rounded-[10px] px-4 text-[13px]",
+  sm: "h-8 rounded-[8px] px-3 text-[12.5px]",
+  md: "h-9 rounded-[9px] px-4 text-[13px]",
 };
 
 export function Button({

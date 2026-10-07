@@ -1,77 +1,93 @@
 ---
 name: Sonora
-description: Quiet Windows utility for fast, recoverable dictation.
+description: A quiet studio for dictation — silent until you speak.
 colors:
-  canvas: "#f7f7f4"
-  sidebar: "#f1f1ed"
-  surface: "#ffffff"
-  ink: "#181816"
-  muted: "#6f706a"
-  line: "#deded8"
-  line-strong: "#c7c8c0"
-  control: "#1d1d1b"
-  nav-active: "#dfdfd9"
-  success: "#25613f"
-  danger: "#9f2720"
-  danger-soft: "#fff1ef"
-  gadget: "#171716"
-  gadget-muted: "#c8c8c1"
+  studio-white: "#ffffff"
+  studio-canvas: "#f8f8f6"
+  studio-booth: "#f1f1ee"
+  studio-fill: "#e9e9e5"
+  studio-hairline: "#dfdfda"
+  studio-hairline-strong: "#cacac4"
+  studio-faint: "#a3a39d"
+  studio-muted: "#67675f"
+  studio-soft: "#4b4b47"
+  studio-strong: "#2b2b28"
+  studio-ink: "#171716"
+  night-raised: "#232322"
+  night-canvas: "#161615"
+  night-booth: "#1b1b1a"
+  night-fill: "#262625"
+  night-hairline: "#31312f"
+  night-hairline-strong: "#454543"
+  night-faint: "#6a6a66"
+  night-muted: "#a3a39d"
+  night-soft: "#c4c4be"
+  night-strong: "#e2e2dd"
+  night-ink: "#f2f2ee"
+  tally-red: "#c4322b"
+  tally-red-lamp: "#e5483f"
+  tally-red-wash: "#fbeeec"
+  standby-amber: "#9a5c00"
+  standby-amber-lamp: "#e09a2b"
+  cue-green: "#276b41"
+  cue-green-wash: "#e9f3ec"
+  night-tally-red: "#ff6b61"
+  night-standby-amber: "#e3a23b"
+  night-cue-green: "#5cc283"
 typography:
   headline:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "28px"
+    fontFamily: "Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "26px"
     fontWeight: 600
-    lineHeight: 1.25
-    letterSpacing: "-0.025em"
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
+  headline-ready:
+    fontFamily: "Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "32px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
   title:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "17px"
+    fontFamily: "Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "19px"
     fontWeight: 600
     letterSpacing: "-0.015em"
   section:
     fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "14px"
+    fontSize: "13px"
     fontWeight: 600
-    lineHeight: 1.428
-  metricHero:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "42px"
-    fontWeight: 600
-    lineHeight: 1.1
-    letterSpacing: "-0.04em"
-  metricLarge:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "32px"
-    fontWeight: 600
-    lineHeight: 1.15
-    letterSpacing: "-0.03em"
-  metricMedium:
-    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "26px"
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "-0.03em"
+    lineHeight: 1.54
   body:
     fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
     fontSize: "13px"
     fontWeight: 400
-    lineHeight: 1.538
-  label:
+    lineHeight: 1.54
+  reading:
     fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
-    fontSize: "11px"
-    fontWeight: 500
-  mono:
-    fontFamily: "Cascadia Mono, Cascadia Code, Consolas, monospace"
-    fontSize: "11px"
+    fontSize: "13.5px"
     fontWeight: 400
+    lineHeight: 1.6
+  description:
+    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "12.5px"
+    fontWeight: 400
+    lineHeight: 1.6
+  meta:
+    fontFamily: "Segoe UI Variable Text, Segoe UI, system-ui, sans-serif"
+    fontSize: "11.5px"
+    fontWeight: 400
+  timecode:
+    fontFamily: "Cascadia Mono, Cascadia Code, Consolas, monospace"
+    fontSize: "11.5px"
+    fontWeight: 400
+    fontFeature: "tnum"
 rounded:
-  compact: "5px"
   tag: "6px"
-  kbd: "7px"
-  sm: "8px"
-  control: "10px"
-  menu: "12px"
-  surface: "14px"
+  menu-item: "7px"
+  control: "8px"
+  field: "9px"
+  menu: "10px"
+  surface: "12px"
   pill: "9999px"
 spacing:
   "1": "4px"
@@ -83,214 +99,236 @@ spacing:
   "8": "32px"
   "10": "40px"
   "12": "48px"
+  "14": "56px"
 components:
   button-primary:
-    backgroundColor: "{colors.control}"
-    textColor: "{colors.surface}"
+    backgroundColor: "{colors.studio-ink}"
+    textColor: "{colors.studio-canvas}"
     typography: "{typography.body}"
-    rounded: "{rounded.control}"
+    rounded: "{rounded.field}"
     padding: "0 16px"
-    height: "40px"
+    height: "36px"
+  button-primary-hover:
+    backgroundColor: "{colors.studio-strong}"
+    textColor: "{colors.studio-canvas}"
   button-secondary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
+    backgroundColor: "{colors.studio-white}"
+    textColor: "{colors.studio-ink}"
     typography: "{typography.body}"
-    rounded: "{rounded.control}"
+    rounded: "{rounded.field}"
     padding: "0 16px"
-    height: "40px"
+    height: "36px"
+  button-secondary-hover:
+    backgroundColor: "{colors.studio-fill}"
   button-ghost:
     backgroundColor: "transparent"
-    textColor: "{colors.muted}"
+    textColor: "{colors.studio-soft}"
     typography: "{typography.body}"
-    rounded: "{rounded.control}"
+    rounded: "{rounded.field}"
     padding: "0 16px"
-    height: "40px"
+    height: "36px"
   button-danger:
     backgroundColor: "transparent"
-    textColor: "{colors.danger}"
-    typography: "{typography.body}"
+    textColor: "{colors.tally-red}"
+    rounded: "{rounded.field}"
+    height: "36px"
+  button-small:
     rounded: "{rounded.control}"
-    padding: "0 16px"
-    height: "40px"
-  input:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
+    padding: "0 12px"
+    height: "32px"
+  field:
+    backgroundColor: "{colors.studio-white}"
+    textColor: "{colors.studio-ink}"
     typography: "{typography.body}"
+    rounded: "{rounded.field}"
+    padding: "0 12px"
+    height: "36px"
+  segmented:
+    backgroundColor: "{colors.studio-fill}"
+    textColor: "{colors.studio-muted}"
+    rounded: "{rounded.field}"
+    height: "34px"
+  segmented-selected:
+    backgroundColor: "{colors.studio-white}"
+    textColor: "{colors.studio-ink}"
+    rounded: "{rounded.menu-item}"
+  nav-item:
+    textColor: "{colors.studio-muted}"
     rounded: "{rounded.control}"
-    padding: "0 14px"
-    height: "40px"
-  surface:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.surface}"
-  gadget:
-    backgroundColor: "{colors.gadget}"
-    textColor: "{colors.surface}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
+    padding: "0 12px"
+    height: "36px"
+  nav-item-active:
+    backgroundColor: "{colors.studio-fill}"
+    textColor: "{colors.studio-ink}"
+  keycap:
+    backgroundColor: "{colors.studio-white}"
+    textColor: "{colors.studio-ink}"
+    typography: "{typography.timecode}"
+    rounded: "{rounded.tag}"
+    height: "24px"
+  keycap-large:
+    rounded: "{rounded.menu}"
     height: "44px"
+  tally-lamp:
+    backgroundColor: "{colors.studio-hairline-strong}"
+    rounded: "{rounded.pill}"
+    size: "8px"
+  tally-lamp-live:
+    backgroundColor: "{colors.tally-red-lamp}"
+  tally-lamp-standby:
+    backgroundColor: "{colors.standby-amber-lamp}"
 ---
 
 # Design System: Sonora
 
 ## Overview
 
-### Insights no Sonora v2.0
+**Creative North Star: "Estúdio no ar"**
 
-“Sua voz” usa leitura breve e divulgação progressiva: um retrato, uma expressão, até três assuntos e três hábitos. Confiança numérica, siglas acústicas, detalhes de geração e evidências não aparecem na visão inicial. Preferências e medições permanecem acessíveis por teclado nos detalhes. O retrato continua opcional e confirma o envio antes da geração.
+Sonora is a quiet broadcast studio. Everything is off-air and neutral until you speak; the only thing that lights up is the tally lamp. The main window is where you review takes and tune the equipment, not a dashboard to admire: content sits in one ruled column, settings read top to bottom one row at a time, and every action that is not the point of the screen waits behind hover, focus, or an overflow menu.
 
-A barra usa um estado neutro para “Nenhuma voz encontrada”, com retorno automático após 3,2 segundos. Silêncio não recebe aparência de erro nem ações de retranscrição.
-
-**Creative North Star: "Quiet by default"**
-
-Sonora é um utilitário Windows que deve desaparecer no fluxo de trabalho. A janela principal organiza capacidade técnica com densidade de operação, mas sem se apresentar como dashboard: hierarquia vem de espaço, tipografia, divisores finos e divulgação progressiva.
-
-O mundo visual é light-first e quase monocromático. Warm white, branco, near-black e cinzas neutros sustentam toda a interface; cor aparece apenas quando um estado real precisa ser reconhecido. A exceção memorável é o Sonora Bar, uma pílula preta compacta que se expande conforme gravação, processamento, sucesso ou falha exigem informação.
+The world lends the interface four things only: a single numbered grey ramp that inverts for the studio at night, a workhorse Windows sans for every word, a broadcast clock's tabular mono for time, duration and keys, and one signature move, the tally lamp. Navigation, controls and layout stay standard for a Windows productivity tool. The floating dictation pill (gadget) keeps its own black form over any application and shares only the state colours.
 
 **Key Characteristics:**
 
-- Utilitário desktop-native, silencioso e orientado à tarefa.
-- Densidade Operate com controles compactos e áreas de trabalho legíveis.
-- Superfícies flat-by-default, separadas por tom e hairlines.
-- Cor reservada a estados semânticos.
-- Sonora Bar preto como assinatura recorrente e responsiva ao estado.
+- One column, hairline rules, no cards and never a box inside a box.
+- Colour appears only when a real state needs it: live, standby, done, failure.
+- Actions are revealed on hover and focus; a row at rest shows only its content.
+- Every list of takes shares one anatomy: time over duration · text · actions.
+- Light and dark are the same ramp, read in opposite directions; the theme follows Windows by default.
 
 ## Colors
 
-A paleta combina papéis quentes e neutros com tinta near-black; nenhuma cor decorativa compete com o trabalho.
+A numbered studio-grey ramp carries every surface, line and word; three state colours are kept in quarantine.
 
 ### Primary
 
-- **Workhorse Black:** controles primários, foco e ações de alta prioridade.
+- **Studio Ink** (studio-ink / night-ink): primary text, primary buttons, the selected radio and the active toggle track. In dark it becomes the near-white end of the same ramp.
 
 ### Tertiary
 
-- **Semantic Green:** confirmação e disponibilidade reais.
-- **Semantic Red:** gravação, falha e ações destrutivas.
-- **Soft Error Wash:** fundo de mensagens de erro sem transformar a página em alerta.
+- **Tally Red** (tally-red, lamp tally-red-lamp, wash tally-red-wash; night-tally-red): live recording, failures and destructive actions. The lamp glows; text uses the darker reading value.
+- **Standby Amber** (standby-amber, lamp standby-amber-lamp; night-standby-amber): processing, fallbacks used and checks that need attention.
+- **Cue Green** (cue-green, wash cue-green-wash; night-cue-green): saved, copied, configured, healthy.
 
 ### Neutral
 
-- **Warm Canvas:** fundo contínuo da janela principal.
-- **Quiet Sidebar:** plano de navegação sutilmente separado do canvas.
-- **Working White:** campos, menus e superfícies de conteúdo.
-- **Near-black Ink:** texto principal e ícones de maior ênfase.
-- **Muted Graphite:** descrições, metadados e navegação inativa.
-- **Hairline Gray:** bordas, regras e divisores; a versão forte aparece em hover ou em limites que precisam de definição adicional.
-- **Gadget Black:** corpo da Sonora Bar, independente do canvas claro.
+- **Studio Canvas** (studio-canvas / night-canvas): the window ground behind all content.
+- **Studio Booth** (studio-booth / night-booth): the sidebar plane, one step off the canvas.
+- **Studio White** (studio-white / night-raised): fields, menus and raised controls.
+- **Studio Fill** (studio-fill / night-fill): hover washes, the active nav item, segmented track, skeletons.
+- **Hairline** (studio-hairline / night-hairline): every rule and border; the strong step marks hovered fields, keycap edges and the resting lamp.
+- **Muted Graphite** (studio-muted / night-muted): descriptions, metadata and timecodes; the lowest step allowed for text (≥4.5:1 on canvas in both themes).
+- **Faint** (studio-faint / night-faint): non-text only: icons at rest, separators like the keycap "+", list markers.
 
 ### Named Rules
 
-**The Semantic Color Rule.** Fora dos neutros, cor só comunica um estado real; nunca funciona como decoração, branding ornamental ou preenchimento de seção.
+**The Quarantine Rule.** Outside the grey ramp, colour only ever names a state that is true right now. It is never a brand accent, a section fill or decoration.
+
+**The One Ramp Rule.** Neutrals come only from the numbered ramp (n0–n10). Dark mode is the same ramp inverted, never a separate palette.
 
 ## Typography
 
-**Display Font:** Segoe UI Variable Text, com Segoe UI e system-ui como fallback
+**Display Font:** Segoe UI Variable Display (with Segoe UI Variable Text, Segoe UI, system-ui)
+**Body Font:** Segoe UI Variable Text (with Segoe UI, system-ui)
+**Label/Mono Font:** Cascadia Mono (with Cascadia Code, Consolas)
 
-**Body Font:** Segoe UI Variable Text, com Segoe UI e system-ui como fallback
-**Label/Mono Font:** Cascadia Mono, com Cascadia Code e Consolas como fallback
-
-**Character:** Uma única sans de sistema trabalha em todos os níveis e mantém o aplicativo familiar no Windows. Peso, tamanho e espaçamento criam hierarquia sem depender de fontes de personalidade ou contrastes editoriais.
+**Character:** The Windows sans does all the talking so the app feels native; the broadcast clock's mono appears only where a value is time, a duration, a key or a technical identifier.
 
 ### Hierarchy
 
-- **Headline** (600, 28px, 1.25, -0.025em): título principal de cada página.
-- **Title** (600, 17px, -0.015em): pipeline ativa e outros destaques locais.
-- **Section title** (600, 14px, 20px): entrada de seções operacionais.
-- **Metric hero / large / medium** (600, 42px / 32px / 26px): números analíticos e valores dominantes; sempre tabulares quando numéricos e nunca usados como título de navegação.
-- **Body** (400, 13px, 20px): descrições, linhas de dados e controles; descrições longas ficam em aproximadamente 68–72ch.
-- **Label** (500, 11px): metadados, atalhos e informação compacta.
-- **Mono** (400, 11px): caminhos, modelos, temporizadores e valores técnicos.
+- **Headline** (600, 26px, 1.2, -0.02em): the page title of each section.
+- **Headline Ready** (600, 32px): the Início state line, "Pronto para ditar" / "No ar" / "Processando o ditado", with the elapsed clock beside it in mono.
+- **Title** (600, 19px, -0.015em): the current Ajustes subsection.
+- **Section** (600, 13px): group headings; carry the hierarchy through weight, not size.
+- **Reading** (400, 13.5px, 1.6): transcripts and notes, on a 68ch measure.
+- **Body** (400, 13px, 1.54): rows, controls, sentences.
+- **Description** (400, 12.5px, 1.6): the explanation under a setting, at most 60–64ch.
+- **Meta** (400, 11.5px): counts, word totals, labels above a value.
+- **Timecode** (400, 11.5px mono, tabular): time, duration, model IDs, paths, percentages.
 
 ### Named Rules
 
-**The Workhorse Type Rule.** Segoe faz o trabalho inteiro; use mono apenas quando a estrutura técnica ou tabular do valor melhora a leitura.
+**The Broadcast Clock Rule.** Mono is for measurement only: time, duration, keys, IDs and paths. Never use it to make a label look technical.
+
+**The No Eyebrow Rule.** A heading speaks for itself. No small label sits above a heading to introduce it.
 
 ## Layout
 
-A janela é uma shell fixa com sidebar de 216px e conteúdo rolável. O conteúdo central usa largura máxima de 1260px, padding lateral de 28–48px conforme a largura e padding superior de 56px para conviver com a title bar transparente.
+The shell is a 220px booth sidebar (64px icon rail under 900px) and a scrolling main area. Every page shares one left edge: the shell is up to 1040px wide with 48px side padding (32px under 1100px) and a 64px top margin under the transparent title bar. Início, Histórico and Insights read in a left-aligned 784px column; Ajustes uses the full width with a 168px text sub-nav and a 720px settings column, collapsing to a horizontal sub-nav under 1040px.
 
-O ritmo parte de incrementos de 4px, concentrando-se em 8px, 12px, 16px, 20px, 24px, 32px e 40px. A densidade é deliberadamente operacional: linhas de preferência têm altura mínima de 76px, botões e campos padrão têm 40px, e listas separam itens por regras em vez de cartões independentes.
-
-Em 1180px, a sidebar reduz de 216px para 76px e esconde labels; a navegação interna de Configurações vira faixa horizontal. Grids específicos colapsam em 980px, 860px, 850px e 820px conforme o conteúdo exige. Essas mudanças preservam a mesma hierarquia, sem criar uma identidade mobile paralela.
+The rhythm is a 4px base, mostly 12, 16, 24, 40 and 48–56px. Sections are separated by 48px of space, not by containers. Settings rows are at least 64px tall with 40px between label and control. Lists use hairline dividers; Histórico groups takes by day under a ruled day heading and paginates only past 50.
 
 ## Elevation & Depth
 
-O sistema é flat-by-default. Canvas, sidebar e superfície branca criam profundidade por diferença tonal, bordas de 1px e divisores; sombras ficam restritas a elementos que realmente flutuam, como menus e a Sonora Bar. Teclas e o knob do toggle recebem microelevação tátil, não decoração ambiente.
+Flat by default. Depth comes from the ramp step between canvas, booth and raised fields, plus 1px hairlines. Shadows exist only for things that float or behave physically.
 
 ### Shadow Vocabulary
 
-- **Floating gadget:** sombra ampla em duas camadas para separar a Sonora Bar de qualquer aplicativo sob o overlay.
-- **Menu:** sombra difusa somente enquanto o menu está aberto.
-- **Keycap:** linha inferior de 1px para sugerir uma tecla física.
-- **Toggle knob:** sombra curta para separar o knob branco do trilho.
+- **Menu** (`0 12px 32px -12px rgb(20 20 18 / 0.22), 0 2px 6px -2px rgb(20 20 18 / 0.08)`; darker in night): open overflow menus, the save-status pill and dialogs.
+- **Keycap** (`0 1.5px 0` in the strong hairline): the bottom edge of a physical key.
+- **Tally glow** (a 3px ring plus a 12px bloom in the lamp colour): only while live or standby.
 
 ### Named Rules
 
-**The Flat-by-Default Rule.** Se uma superfície não flutua nem responde fisicamente ao usuário, use tom, borda ou divisor antes de considerar sombra.
+**The Off-Air Rule.** A surface that neither floats nor reports live state gets no shadow and no glow.
 
 ## Shapes
 
-Controles usam cantos compactos entre 8px e 10px; menus usam 12px e superfícies principais 14px. Tags pequenas podem usar 5–7px. A geometria permanece suavemente arredondada, nunca inflada: pílulas completas são reservadas ao Sonora Bar, toggles, indicadores e ações circulares dentro do gadget.
-
-Bordas são hairlines neutras. Containers extensos podem usar apenas bordas horizontais e divisores quando um cartão fechado adicionaria peso desnecessário.
+Gently rounded and compact: controls 8–9px, menus 10px, the rare framed surface 12px. Full pills are kept for the tally lamp, the toggle, segmented thumbs, language chips and the gadget. Rules are 1px hairlines; containers usually use top and bottom rules only.
 
 ## Components
 
 ### Buttons
 
-- **Shape:** 10px e 40px de altura por padrão; 8px e 32px no tamanho compacto.
-- **Primary:** fundo Workhorse Black, texto branco, peso 500 e padding horizontal de 16px.
-- **Secondary:** superfície branca com hairline; hover reforça a borda e acrescenta um wash neutro.
-- **Ghost:** transparente em repouso, com wash neutro apenas em hover.
-- **Danger:** texto Semantic Red em repouso e Soft Error Wash em hover.
-- **Focus / Disabled:** outline near-black de 2px com offset de 2px; disabled reduz opacidade e remove a affordance de clique.
+- **Shape:** 9px corners, 36px tall; small is 8px corners, 32px tall.
+- **Primary:** Studio Ink fill with canvas text. One per view at most, reserved for the action the screen exists for.
+- **Secondary:** raised fill with a hairline; hover adds the fill wash and strong hairline.
+- **Ghost / Danger:** transparent until hover; danger text is Tally Red with a red wash on hover.
+- **Disabled:** 40% opacity. A disabled primary drops to secondary so it never reads as a broken filled block.
+
+### Overflow menu
+
+One quiet "…" trigger replaces rows of icon buttons. It opens a 10px raised menu with the Menu shadow. Items are text with a 16px icon, arrow keys move between them, and Esc returns focus to the trigger. Destructive items sit last, after a hairline, in Tally Red.
+
+### Log row (signature)
+
+The studio log, used wherever takes are listed. The anatomy is a 52px column with time over duration in mono, then the text (one line in Início, up to three lines on the 68ch measure in Histórico), then a 104px actions slot. Actions (play, copy, …) appear on hover or focus. Play and copy stay visible while active. A failed take shows its one labelled recovery button.
 
 ### Inputs / Fields
 
-- **Style:** superfície branca, hairline, cantos de 10px, altura de 40px e padding horizontal de 14px.
-- **Hover / Focus:** borda mais forte no hover; no foco, borda média e ring near-black com 10% de opacidade.
-- **Disabled:** fundo neutral baixo, texto atenuado e cursor de indisponibilidade.
+- **Style:** raised fill, hairline border, 9px corners, 36px tall.
+- **Focus:** a faint border plus a 3px ink ring at 8% opacity; the global focus-visible outline is 2px ink with a 2px offset.
+- **Inline select:** inside a sentence, a select is just its underlined value with a small chevron, no box.
 
 ### Navigation
 
-- **Primary sidebar:** item de 40px com cantos de 10px; inativo usa Muted Graphite e wash no hover, ativo usa Nav Active e Near-black Ink.
-- **Settings navigation:** mantém a mesma lógica em item de 9px e passa para navegação horizontal abaixo de 1180px.
+- **Sidebar:** text-led items, 36px tall. At rest muted with no fill; the active item gets the fill and ink. Under 900px only icons show, and labels stay in the accessibility tree.
+- **Ajustes sub-nav:** text only. The active item is filled.
+- **Segmented control:** a fill track with a raised thumb. Used for period, theme and Ditados/Notas.
 
-### Cards / Containers
+### Tally lamp (signature)
 
-- **Corner Style:** 14px em superfícies fechadas.
-- **Background:** Working White ou Quiet Sidebar para agrupamentos sutis.
-- **Shadow Strategy:** sem sombra em repouso.
-- **Border:** hairline; listas internas usam divisores.
-- **Internal Padding:** definido pelo conteúdo, normalmente 20–24px.
+An 8px lamp beside the wordmark (12px beside the Início headline). At rest it is an unlit hairline-grey bead with an inset shadow. Live, it glows Tally Red, and the sidebar names it "Gravando". Standby, it pulses amber. It follows the backend recording lifecycle and nothing else.
 
-### Toggle
+### Keycap
 
-O trilho tem 40×24px e forma de pílula; desligado usa cinza médio e ligado usa near-black. O knob branco de 16px move 16px em 150ms e recebe sombra curta.
-
-### Keyboard Shortcut
-
-Tecla compacta com fundo Warm Canvas, borda, raio de 7px, label de 11px e uma linha inferior de 1px. Combinações usam sinais de adição discretos, nunca uma caixa única para toda a sequência.
-
-### Sonora Bar
-
-A assinatura do sistema é uma pílula preta de 44px de altura. O estado idle pode medir apenas 44px ou 72px; estados informativos expandem horizontalmente conforme o conteúdo. O waveform branco responde ao RMS real, vermelho aparece durante gravação, e os estados entram em 180ms com easing de desaceleração. A barra não ganha chrome, cabeçalho, gradiente ou painel auxiliar.
+A raised fill and strong hairline with a 1.5px bottom edge, in mono. Small (24px) in rows and sentences, large (44px) for the Início hotkey.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** mantenha a maior parte de cada tela em Warm Canvas, Working White, near-black e cinzas neutros.
-- **Do** agrupe informação por espaço, hairlines e divulgação progressiva antes de criar novos containers.
-- **Do** preserve controles compactos, foco visível, estados disabled/loading e hit targets adequados.
-- **Do** deixe o Sonora Bar expandir somente quando o estado exige texto, waveform, recuperação ou confirmação.
-- **Do** use cor apenas para sucesso, gravação, aviso, erro ou destruição reais.
+- **Do** keep every neutral on the n0–n10 ramp and let dark mode invert it.
+- **Do** reveal row and item actions on hover and focus, and name every icon-only control with an aria-label and a title.
+- **Do** separate groups with 48px of space and hairlines before reaching for a container.
+- **Do** use the log row anatomy (time over duration · text · actions) for any list of takes.
+- **Do** keep descriptions to one or two short lines under the setting they explain.
 
 ### Don't:
 
-- **Don't** reintroduza laranja, glow, gradientes ou uma estética dark dominante.
-- **Don't** transforme a home ou Configurações em dashboard de métricas, mosaico de cards ou showcase de capacidades.
-- **Don't** use sombra em superfícies estáticas quando tom, borda ou divisor resolve a hierarquia.
-- **Don't** aplique pílulas indiscriminadamente; a silhueta completa pertence principalmente ao gadget e a controles binários.
-- **Don't** copie logo, assets, tipografia ou branding de Wispr Flow ou de qualquer produto externo.
+- **Don't** use colour for anything but live, standby, done or failure.
+- **Don't** put cards inside cards, or wrap a settings group in a box when hairlines already separate it.
+- **Don't** show a row of always-visible icon buttons on list items.
+- **Don't** add a small label above a heading, or a big-number metric trio as a page opener.
+- **Don't** reintroduce orange, glow outside the tally lamp, or gradients.

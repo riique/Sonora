@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, FileAudio, Loader2, UploadCloud } from "lucide-react";
+import { AlertCircle, Check, FileAudio, Loader2, Upload } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Button } from "../components/ui/Button";
-import { PageHeader } from "../components/ui/Surface";
 import { cancelRecording, transcribeFile } from "../lib/tauri";
 
 type Status = "idle" | "transcribing" | "done" | "error";
@@ -14,6 +13,7 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+/** File transcription panel, opened from Histórico. Uses the active pipeline and never pastes. */
 export function TranscricaoView() {
   const busy = useRef(false);
   const [filePath, setFilePath] = useState<string | null>(null);
@@ -84,61 +84,53 @@ export function TranscricaoView() {
     } finally { busy.current = false; }
   };
 
+  const transcribing = status === "transcribing";
+
   return (
-    <div className="space-y-8">
-      <PageHeader title="Transcrição" description="Envie um arquivo de áudio para transcrever com a pipeline ativa." />
+    <section aria-labelledby="upload-title" className="space-y-4">
+      <button
+        type="button"
+        disabled={transcribing}
+        onClick={handleBrowse}
+        className={
+          "flex min-h-[148px] w-full flex-col items-center justify-center rounded-[12px] border border-dashed px-8 py-8 text-center transition-colors duration-150 disabled:cursor-not-allowed " +
+          (dragging ? "border-ink bg-fill" : "border-line-strong bg-raised hover:border-faint hover:bg-fill/40")
+        }
+        aria-describedby="upload-formats"
+      >
+        {filePath ? <FileAudio className="h-5 w-5 text-ink" aria-hidden /> : <Upload className="h-5 w-5 text-muted" aria-hidden />}
+        <span id="upload-title" className="mt-3 text-[13.5px] font-medium text-ink">
+          {filePath ? baseName(filePath) : "Arraste um arquivo de áudio ou clique para escolher"}
+        </span>
+        <span id="upload-formats" className="mt-1 text-[12px] text-muted">
+          {filePath ? "Clique para escolher outro arquivo" : "WAV, MP3, M4A, FLAC, OGG, AAC, WEBM ou MP4 · usa o modo de transcrição ativo"}
+        </span>
+      </button>
 
-      {status === "transcribing" && <Button onClick={() => void cancelRecording().catch((e) => setError(String(e)))}>Cancelar transcrição</Button>}
-      <section className="surface overflow-hidden" aria-labelledby="upload-title">
-        <button
-          type="button"
-          disabled={status === "transcribing"}
-          onClick={handleBrowse}
-          className={
-            "m-6 flex min-h-[330px] w-[calc(100%-3rem)] flex-col items-center justify-center rounded-[12px] border border-dashed px-10 py-14 text-center transition-colors " +
-            (dragging
-              ? "border-[#656660] bg-[#f0f0eb]"
-              : "border-[#d7d7d1] bg-[#fcfcfa] hover:border-[#a8a9a2] hover:bg-[#f8f8f4]")
-          }
-          aria-describedby="upload-formats"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-white text-[#50514c]">
-            {filePath ? <FileAudio className="h-5 w-5" aria-hidden /> : <UploadCloud className="h-5 w-5" aria-hidden />}
-          </span>
-          <span id="upload-title" className="mt-5 text-[15px] font-medium text-ink">
-            {filePath ? baseName(filePath) : "Clique ou arraste seu arquivo de áudio aqui"}
-          </span>
-          <span id="upload-formats" className="mt-2 text-[13px] text-muted">
-            {filePath ? "Clique para escolher outro arquivo" : "WAV, MP3, M4A, FLAC, OGG, AAC, WEBM ou MP4"}
-          </span>
-          {!filePath && <span className="mt-5 text-[12px] font-medium text-[#555650]">Escolher arquivo</span>}
-        </button>
-
-        <div className="flex min-h-[62px] items-center justify-between gap-5 border-t border-line px-6 py-4">
-          <p className="text-[12px] leading-5 text-muted">A pipeline definida em Configurações será usada automaticamente.</p>
-          <Button variant="primary" disabled={!filePath || status === "transcribing"} onClick={handleTranscribe}>
-            {status === "transcribing" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            {status === "transcribing" ? "Transcrevendo…" : "Transcrever arquivo"}
-          </Button>
-        </div>
-      </section>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {transcribing && <Button variant="ghost" onClick={() => void cancelRecording().catch((e) => setError(String(e)))}>Cancelar transcrição</Button>}
+        <Button variant="primary" disabled={!filePath || transcribing} onClick={handleTranscribe}>
+          {transcribing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+          {transcribing ? "Transcrevendo…" : "Transcrever arquivo"}
+        </Button>
+      </div>
 
       {status === "error" && (
-        <div className="flex items-start gap-3 rounded-[10px] bg-[#fff1ef] px-4 py-3 text-[13px] text-[#9f2720]" role="alert">
+        <div className="flex items-start gap-2.5 rounded-[9px] bg-live-wash px-4 py-3 text-[13px] text-live" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
+          <span className="min-w-0 wrap-break-word">{error}</span>
         </div>
       )}
 
       {status === "done" && (
-        <div className="surface overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-line px-5 py-4 text-[13px] font-medium text-[#25613f]" role="status">
-            <CheckCircle2 className="h-4 w-4" aria-hidden />
+        <div className="border-y border-line py-5">
+          <p className="flex items-center gap-2 text-[12.5px] font-medium text-cue" role="status">
+            <Check className="h-4 w-4" aria-hidden />
             Transcrição concluída e salva no histórico
-          </div>
-          <p className="whitespace-pre-wrap px-5 py-5 text-[14px] leading-6 text-[#343530]">{result}</p>
+          </p>
+          <p className="mt-3 max-w-[68ch] whitespace-pre-wrap text-[13.5px] leading-[1.6] text-ink">{result}</p>
         </div>
       )}
-    </div>
+    </section>
   );
 }

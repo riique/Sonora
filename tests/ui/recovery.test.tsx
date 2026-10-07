@@ -49,7 +49,8 @@ test("home renders the persisted clipboard destination with labeled quick contro
   const controls = host.querySelectorAll("select");
   expect(controls[0].value).toBe("clipboard_only");
   for (const control of controls) expect(control.closest("label")?.textContent).toBeTruthy();
-  expect(host.textContent).toContain("Verificar configuração");
+  expect(host.textContent).toContain("Ultrarrápido");
+  expect(host.textContent).toContain("Pronto para ditar");
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 test("initial preference failure exposes an actionable error instead of permanent loading", async () => {

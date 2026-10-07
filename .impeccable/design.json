@@ -1,49 +1,245 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-25T14:48:45.0404212-03:00",
+  "generatedAt": "2026-10-07T11:42:01.319112Z",
   "title": "Design System: Sonora",
   "extensions": {
     "colorMeta": {
-      "canvas": { "role": "neutral", "displayName": "Warm Canvas" },
-      "sidebar": { "role": "neutral", "displayName": "Quiet Sidebar" },
-      "surface": { "role": "neutral", "displayName": "Working White" },
-      "ink": { "role": "neutral", "displayName": "Near-black Ink" },
-      "muted": { "role": "neutral", "displayName": "Muted Graphite" },
-      "line": { "role": "neutral", "displayName": "Hairline Gray" },
-      "line-strong": { "role": "neutral", "displayName": "Strong Hairline" },
-      "control": { "role": "primary", "displayName": "Workhorse Black" },
-      "nav-active": { "role": "neutral", "displayName": "Active Navigation" },
-      "success": { "role": "tertiary", "displayName": "Semantic Green" },
-      "danger": { "role": "tertiary", "displayName": "Semantic Red" },
-      "danger-soft": { "role": "tertiary", "displayName": "Soft Error Wash" },
-      "gadget": { "role": "primary", "displayName": "Gadget Black" },
-      "gadget-muted": { "role": "neutral", "displayName": "Gadget Muted" }
+      "studio-ink": {
+        "role": "primary",
+        "displayName": "Studio Ink",
+        "canonical": "#171716",
+        "tonalRamp": [
+          "#171716",
+          "#2b2b28",
+          "#4b4b47",
+          "#67675f",
+          "#a3a39d",
+          "#cacac4",
+          "#dfdfda",
+          "#f8f8f6"
+        ]
+      },
+      "studio-canvas": {
+        "role": "neutral",
+        "displayName": "Studio Canvas",
+        "canonical": "#f8f8f6",
+        "tonalRamp": [
+          "#171716",
+          "#2b2b28",
+          "#4b4b47",
+          "#67675f",
+          "#a3a39d",
+          "#cacac4",
+          "#dfdfda",
+          "#f8f8f6"
+        ]
+      },
+      "studio-booth": {
+        "role": "neutral",
+        "displayName": "Studio Booth",
+        "canonical": "#f1f1ee",
+        "tonalRamp": [
+          "#171716",
+          "#2b2b28",
+          "#4b4b47",
+          "#67675f",
+          "#a3a39d",
+          "#cacac4",
+          "#dfdfda",
+          "#f8f8f6"
+        ]
+      },
+      "studio-hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#dfdfda",
+        "tonalRamp": [
+          "#171716",
+          "#2b2b28",
+          "#4b4b47",
+          "#67675f",
+          "#a3a39d",
+          "#cacac4",
+          "#dfdfda",
+          "#f8f8f6"
+        ]
+      },
+      "studio-muted": {
+        "role": "neutral",
+        "displayName": "Muted Graphite",
+        "canonical": "#67675f",
+        "tonalRamp": [
+          "#171716",
+          "#2b2b28",
+          "#4b4b47",
+          "#67675f",
+          "#a3a39d",
+          "#cacac4",
+          "#dfdfda",
+          "#f8f8f6"
+        ]
+      },
+      "night-canvas": {
+        "role": "neutral",
+        "displayName": "Night Canvas",
+        "canonical": "#161615",
+        "tonalRamp": [
+          "#161615",
+          "#1b1b1a",
+          "#262625",
+          "#31312f",
+          "#454543",
+          "#6a6a66",
+          "#a3a39d",
+          "#f2f2ee"
+        ]
+      },
+      "night-ink": {
+        "role": "primary",
+        "displayName": "Night Ink",
+        "canonical": "#f2f2ee",
+        "tonalRamp": [
+          "#161615",
+          "#1b1b1a",
+          "#262625",
+          "#31312f",
+          "#454543",
+          "#6a6a66",
+          "#a3a39d",
+          "#f2f2ee"
+        ]
+      },
+      "tally-red": {
+        "role": "tertiary",
+        "displayName": "Tally Red",
+        "canonical": "#c4322b",
+        "tonalRamp": [
+          "#4a1310",
+          "#6e1c18",
+          "#952621",
+          "#c4322b",
+          "#e5483f",
+          "#ef8279",
+          "#f6bdb7",
+          "#fbeeec"
+        ]
+      },
+      "standby-amber": {
+        "role": "tertiary",
+        "displayName": "Standby Amber",
+        "canonical": "#9a5c00",
+        "tonalRamp": [
+          "#3a2300",
+          "#5c3700",
+          "#7b4a00",
+          "#9a5c00",
+          "#e09a2b",
+          "#ebbb6e",
+          "#f4dcb0",
+          "#f8f0e2"
+        ]
+      },
+      "cue-green": {
+        "role": "tertiary",
+        "displayName": "Cue Green",
+        "canonical": "#276b41",
+        "tonalRamp": [
+          "#0f2a19",
+          "#174026",
+          "#1f5534",
+          "#276b41",
+          "#3d9a61",
+          "#5cc283",
+          "#a9dcbc",
+          "#e9f3ec"
+        ]
+      }
     },
     "typographyMeta": {
-      "headline": { "displayName": "Page Headline", "purpose": "Primary page titles." },
-      "title": { "displayName": "Local Title", "purpose": "Active pipeline and other local emphasis." },
-      "body": { "displayName": "Operate Body", "purpose": "Descriptions, rows, fields and controls." },
-      "label": { "displayName": "Compact Label", "purpose": "Metadata, shortcuts and gadget status." },
-      "mono": { "displayName": "Technical Mono", "purpose": "Paths, models, clocks and diagnostics." }
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page title of each section."
+      },
+      "headline-ready": {
+        "displayName": "Headline Ready",
+        "purpose": "Início state line with the live clock."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Current Ajustes subsection."
+      },
+      "section": {
+        "displayName": "Section",
+        "purpose": "Group headings."
+      },
+      "reading": {
+        "displayName": "Reading",
+        "purpose": "Transcripts and notes on a 68ch measure."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Rows, controls, sentences."
+      },
+      "description": {
+        "displayName": "Description",
+        "purpose": "Explanation under a setting."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Counts and labels."
+      },
+      "timecode": {
+        "displayName": "Timecode",
+        "purpose": "Time, duration, keys, IDs and paths."
+      }
     },
     "shadows": [
-      { "name": "float", "value": "0 18px 44px -18px rgba(20, 20, 18, 0.42), 0 4px 14px -6px rgba(20, 20, 18, 0.24)", "purpose": "Separate the always-on-top Sonora Bar from arbitrary desktop content." },
-      { "name": "menu", "value": "0 18px 48px -20px rgba(20, 20, 18, 0.28)", "purpose": "Open contextual menus only." },
-      { "name": "keycap", "value": "0 1px 0 #c8c8c1", "purpose": "Give keyboard shortcut keys a restrained physical edge." },
-      { "name": "toggle-knob", "value": "0 1px 3px rgba(0, 0, 0, 0.24)", "purpose": "Separate the white toggle knob from its track." }
+      {
+        "name": "menu",
+        "value": "0 12px 32px -12px rgb(20 20 18 / 0.22), 0 2px 6px -2px rgb(20 20 18 / 0.08)",
+        "purpose": "Open menus, the save-status pill and dialogs."
+      },
+      {
+        "name": "keycap",
+        "value": "0 1.5px 0 var(--n5)",
+        "purpose": "Bottom edge of a physical key."
+      },
+      {
+        "name": "tally-live",
+        "value": "0 0 0 3px color-mix(in srgb, var(--live-lamp) 18%, transparent), 0 0 12px 1px color-mix(in srgb, var(--live-lamp) 55%, transparent)",
+        "purpose": "Lit tally lamp while recording."
+      }
     ],
     "motion": [
-      { "name": "state-color", "value": "150ms", "purpose": "Button, navigation, field and toggle state changes." },
-      { "name": "gadget-enter", "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Sonora Bar state entry with opacity, translate, scale and brief blur." },
-      { "name": "quiet-pulse", "value": "1.2s ease-in-out infinite", "purpose": "Recording and processing status only." },
-      { "name": "meter-width", "value": "75ms", "purpose": "Microphone input level response." }
+      {
+        "name": "fade-in",
+        "value": "160ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "View and panel entrance, 3px rise."
+      },
+      {
+        "name": "state",
+        "value": "150ms ease",
+        "purpose": "Hover, colour and row-action reveal."
+      },
+      {
+        "name": "tally",
+        "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Lamp lighting; standby pulses at 1.2s."
+      }
     ],
     "breakpoints": [
-      { "name": "settings-vocabulary", "value": "820px" },
-      { "name": "shortcut-layout", "value": "850px" },
-      { "name": "history-layout", "value": "860px" },
-      { "name": "home-pipeline", "value": "980px" },
-      { "name": "compact-navigation", "value": "1180px" }
+      {
+        "name": "rail",
+        "value": "900px"
+      },
+      {
+        "name": "settings-stack",
+        "value": "1040px"
+      },
+      {
+        "name": "compact-padding",
+        "value": "1100px"
+      }
     ]
   },
   "components": [
@@ -51,108 +247,109 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Highest-priority local action in the management window.",
-      "html": "<button class=\"ds-btn-primary\" type=\"button\">Salvar alterações</button>",
-      "css": ".ds-btn-primary { display:inline-flex; height:40px; align-items:center; justify-content:center; gap:8px; border:1px solid #1d1d1b; border-radius:10px; background:#1d1d1b; color:#fff; padding:0 16px; font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; transition:background-color 150ms,border-color 150ms,color 150ms; } .ds-btn-primary:hover { background:#000; border-color:#000; } .ds-btn-primary:active { background:#181816; } .ds-btn-primary:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-btn-primary:disabled { cursor:not-allowed; opacity:.4; }"
+      "description": "The one action a view exists for.",
+      "html": "<button class=\"ds-btn-primary\">Transcrever arquivo</button>",
+      "css": ".ds-btn-primary{height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--n10);background:var(--n10);color:var(--n1);font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s}.ds-btn-primary:hover{background:var(--n9);border-color:var(--n9)}.ds-btn-primary:focus-visible{outline:2px solid var(--n10);outline-offset:2px}"
     },
     {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "Default action where hierarchy should remain quiet.",
-      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Configurar</button>",
-      "css": ".ds-btn-secondary { display:inline-flex; height:40px; align-items:center; justify-content:center; gap:8px; border:1px solid #deded8; border-radius:10px; background:#fff; color:#292a27; padding:0 16px; font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; transition:background-color 150ms,border-color 150ms,color 150ms; } .ds-btn-secondary:hover { border-color:#c7c8c0; background:#f4f4f0; } .ds-btn-secondary:active { background:#ecece7; } .ds-btn-secondary:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-btn-secondary:disabled { cursor:not-allowed; opacity:.4; }"
+      "description": "Default action button.",
+      "html": "<button class=\"ds-btn-secondary\">Escolher pasta</button>",
+      "css": ".ds-btn-secondary{height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--n4);background:var(--n0);color:var(--n10);font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s,border-color .15s}.ds-btn-secondary:hover{background:var(--n3);border-color:var(--n5)}.ds-btn-secondary:focus-visible{outline:2px solid var(--n10);outline-offset:2px}"
     },
     {
-      "name": "Ghost Button",
-      "kind": "button",
-      "refersTo": "button-ghost",
-      "description": "Low-emphasis navigation or contextual action.",
-      "html": "<button class=\"ds-btn-ghost\" type=\"button\">Ver histórico →</button>",
-      "css": ".ds-btn-ghost { display:inline-flex; height:40px; align-items:center; justify-content:center; gap:8px; border:1px solid transparent; border-radius:10px; background:transparent; color:#555650; padding:0 16px; font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; transition:background-color 150ms,border-color 150ms,color 150ms; } .ds-btn-ghost:hover { background:#ecece7; color:#181816; } .ds-btn-ghost:active { background:#dfdfd9; } .ds-btn-ghost:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-btn-ghost:disabled { cursor:not-allowed; opacity:.4; }"
-    },
-    {
-      "name": "Destructive Button",
-      "kind": "button",
-      "refersTo": "button-danger",
-      "description": "Destructive action without making the surrounding surface visually alarming.",
-      "html": "<button class=\"ds-btn-danger\" type=\"button\">Remover</button>",
-      "css": ".ds-btn-danger { display:inline-flex; height:40px; align-items:center; justify-content:center; gap:8px; border:1px solid transparent; border-radius:10px; background:transparent; color:#a72a21; padding:0 16px; font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; transition:background-color 150ms,border-color 150ms,color 150ms; } .ds-btn-danger:hover { background:#fff1ef; } .ds-btn-danger:active { background:#fbe7e4; } .ds-btn-danger:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-btn-danger:disabled { cursor:not-allowed; opacity:.4; }"
-    },
-    {
-      "name": "Text Field",
+      "name": "Field",
       "kind": "input",
-      "refersTo": "input",
-      "description": "Compact text entry for search, paths and settings.",
-      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Buscar transcrições…\" aria-label=\"Buscar transcrições\">",
-      "css": ".ds-input { width:100%; height:40px; border:1px solid #deded8; border-radius:10px; background:#fff; color:#181816; padding:0 14px; font:400 13px/20px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; transition:border-color 150ms,box-shadow 150ms,background-color 150ms; } .ds-input::placeholder { color:#5d5e58; } .ds-input:hover { border-color:#c7c8c0; } .ds-input:focus { border-color:#999a93; outline:none; box-shadow:0 0 0 2px rgba(32,32,30,.1); } .ds-input:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-input:disabled { cursor:not-allowed; background:#f0f0ec; color:#8c8d86; }"
+      "refersTo": "field",
+      "description": "Text input.",
+      "html": "<input class=\"ds-field\" placeholder=\"Buscar transcrições\">",
+      "css": ".ds-field{height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--n4);background:var(--n0);color:var(--n10);font:13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;transition:border-color .15s,box-shadow .15s}.ds-field::placeholder{color:var(--n7)}.ds-field:hover{border-color:var(--n5)}.ds-field:focus{outline:none;border-color:var(--n6);box-shadow:0 0 0 3px color-mix(in srgb,var(--n10) 8%,transparent)}"
     },
     {
-      "name": "Active Navigation Item",
+      "name": "Sidebar Navigation",
       "kind": "nav",
-      "description": "Current destination in the collapsible desktop sidebar.",
-      "html": "<button class=\"ds-nav-item\" type=\"button\" aria-current=\"page\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" aria-hidden=\"true\"><path d=\"m3 11 9-8 9 8\"></path><path d=\"M5 10v10h14V10\"></path><path d=\"M9 20v-6h6v6\"></path></svg><span>Início</span></button>",
-      "css": ".ds-nav-item { display:flex; width:192px; height:40px; align-items:center; gap:12px; border:0; border-radius:10px; background:transparent; color:#5e5f59; padding:0 12px; font:500 13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; text-align:left; transition:background-color 150ms,color 150ms; } .ds-nav-icon { width:17px; height:17px; flex:none; } .ds-nav-item:hover { background:#e8e8e3; color:#181816; } .ds-nav-item[aria-current='page'] { background:#dfdfd9; color:#181816; } .ds-nav-item:focus-visible { outline:2px solid #20201e; outline-offset:2px; }"
+      "refersTo": "nav-item",
+      "description": "Text-led sidebar items.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\">Início</a><a class=\"ds-nav-item\">Histórico</a><a class=\"ds-nav-item\">Insights</a><a class=\"ds-nav-item\">Ajustes</a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:196px;padding:8px;background:var(--n2)}.ds-nav-item{display:flex;align-items:center;height:36px;padding:0 12px;border-radius:8px;color:var(--n7);font:13px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;cursor:pointer;transition:background-color .15s,color .15s}.ds-nav-item:hover{color:var(--n10);background:color-mix(in srgb,var(--n3) 60%,transparent)}.ds-nav-item.is-active{background:var(--n3);color:var(--n10);font-weight:500}"
     },
     {
-      "name": "Working Surface",
-      "kind": "card",
-      "refersTo": "surface",
-      "description": "Flat content grouping with a hairline boundary.",
-      "html": "<section class=\"ds-surface\"><p class=\"ds-surface-label\">Pipeline ativa</p><strong class=\"ds-surface-title\">Rápido e preciso</strong><p class=\"ds-surface-copy\">Gemini com áudio</p></section>",
-      "css": ".ds-surface { border:1px solid #deded8; border-radius:14px; background:#fff; color:#181816; padding:20px 24px; font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; } .ds-surface-label { margin:0 0 8px; color:#6f706a; font-size:11px; font-weight:500; } .ds-surface-title { display:block; font-size:17px; font-weight:600; letter-spacing:-.015em; } .ds-surface-copy { margin:4px 0 0; color:#6f706a; font-size:12px; }"
-    },
-    {
-      "name": "Toggle",
+      "name": "Tally Lamp",
       "kind": "custom",
-      "description": "Binary preference control with a near-black selected track.",
-      "html": "<button class=\"ds-toggle\" type=\"button\" role=\"switch\" aria-checked=\"true\" aria-label=\"Ativar preferência\"><span class=\"ds-toggle-knob\"></span></button>",
-      "css": ".ds-toggle { position:relative; display:inline-flex; width:40px; height:24px; align-items:center; border:0; border-radius:9999px; background:#c9c9c2; padding:0; transition:background-color 150ms; } .ds-toggle[aria-checked='true'] { background:#242422; } .ds-toggle-knob { width:16px; height:16px; border-radius:9999px; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.24); transform:translateX(4px); transition:transform 150ms; } .ds-toggle[aria-checked='true'] .ds-toggle-knob { transform:translateX(20px); } .ds-toggle:hover { filter:brightness(.97); } .ds-toggle:focus-visible { outline:2px solid #20201e; outline-offset:2px; } .ds-toggle:disabled { cursor:not-allowed; opacity:.4; }"
+      "refersTo": "tally-lamp",
+      "description": "Signature: dark at rest, red while live, pulsing amber on standby.",
+      "html": "<span class=\"ds-tally\"></span> <span class=\"ds-tally is-live\"></span> <span class=\"ds-tally is-standby\"></span>",
+      "css": ".ds-tally{display:inline-block;width:8px;height:8px;margin:0 8px;border-radius:999px;background:var(--n5);box-shadow:inset 0 1px 1px rgb(0 0 0/.18);transition:background-color .18s,box-shadow .24s}.ds-tally.is-live{background:var(--live-lamp);box-shadow:0 0 0 3px color-mix(in srgb,var(--live-lamp) 18%,transparent),0 0 12px 1px color-mix(in srgb,var(--live-lamp) 55%,transparent)}.ds-tally.is-standby{background:var(--standby-lamp);box-shadow:0 0 0 3px color-mix(in srgb,var(--standby-lamp) 16%,transparent)}"
     },
     {
-      "name": "Keyboard Shortcut",
-      "kind": "chip",
-      "description": "Physical keycap treatment for global shortcuts.",
-      "html": "<span class=\"ds-kbd-combo\"><kbd class=\"ds-kbd\">Ctrl</kbd><span class=\"ds-kbd-plus\">+</span><kbd class=\"ds-kbd\">B</kbd></span>",
-      "css": ".ds-kbd-combo { display:inline-flex; align-items:center; gap:6px; font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; } .ds-kbd { display:inline-flex; min-width:28px; align-items:center; justify-content:center; border:1px solid #d5d5cf; border-radius:7px; background:#f7f7f4; color:#444540; padding:4px 8px; box-shadow:0 1px 0 #c8c8c1; font:500 11px/16px 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; } .ds-kbd-plus { color:#999a93; font-size:11px; }"
-    },
-    {
-      "name": "Sonora Bar",
+      "name": "Log Row",
       "kind": "custom",
-      "refersTo": "gadget",
-      "description": "Signature always-on-top dictation control in its recording state.",
-      "html": "<div class=\"ds-gadget\" role=\"status\" aria-label=\"Gravando, 00:12\"><span class=\"ds-gadget-recording\"></span><span class=\"ds-gadget-wave\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class=\"ds-gadget-clock\">00:12</span><button class=\"ds-gadget-stop\" type=\"button\" aria-label=\"Parar e transcrever\"><span></span></button></div>",
-      "css": ".ds-gadget { display:inline-flex; height:44px; align-items:center; gap:12px; border:1px solid rgba(255,255,255,.1); border-radius:9999px; background:#171716; color:#fff; padding:0 8px 0 16px; box-shadow:0 18px 44px -18px rgba(20,20,18,.42),0 4px 14px -6px rgba(20,20,18,.24); font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif; animation:ds-gadget-enter 180ms cubic-bezier(.16,1,.3,1); } .ds-gadget-recording { width:8px; height:8px; border-radius:9999px; background:#ef5a50; } .ds-gadget-wave { display:flex; width:68px; height:28px; align-items:center; justify-content:center; gap:2px; } .ds-gadget-wave i { width:2px; border-radius:9999px; background:#efefe9; opacity:.8; } .ds-gadget-wave i:nth-child(1),.ds-gadget-wave i:nth-child(7) { height:5px; } .ds-gadget-wave i:nth-child(2),.ds-gadget-wave i:nth-child(6) { height:11px; } .ds-gadget-wave i:nth-child(3),.ds-gadget-wave i:nth-child(5) { height:19px; } .ds-gadget-wave i:nth-child(4) { height:25px; } .ds-gadget-clock { width:40px; color:#d4d4ce; font:400 10px 'Cascadia Mono','Cascadia Code',Consolas,monospace; font-variant-numeric:tabular-nums; } .ds-gadget-stop { display:flex; width:32px; height:32px; align-items:center; justify-content:center; border:0; border-radius:9999px; background:#fff; color:#171716; } .ds-gadget-stop span { width:14px; height:14px; border-radius:2px; background:currentColor; } .ds-gadget-stop:hover { background:#e6e6e0; } .ds-gadget-stop:active { transform:scale(.96); } .ds-gadget-stop:focus-visible { outline:2px solid #fff; outline-offset:2px; } @keyframes ds-gadget-enter { from { opacity:.72; transform:translateY(5px) scale(.97); filter:blur(2px); } to { opacity:1; transform:translateY(0) scale(1); filter:blur(0); } } @media (prefers-reduced-motion:reduce) { .ds-gadget { animation-duration:1ms; } }"
+      "refersTo": "log-row",
+      "description": "Signature: time over duration · text · actions revealed on hover.",
+      "html": "<div class=\"ds-log\"><div class=\"ds-log-stamp\"><div>14:02</div><div>0:21</div></div><p class=\"ds-log-text\">Revisar o PR do cache de sessões antes da reunião.</p><div class=\"ds-log-actions\">···</div></div>",
+      "css": ".ds-log{display:grid;grid-template-columns:52px minmax(0,1fr) 104px;gap:0 20px;padding:14px 0;border-bottom:1px solid var(--n4)}.ds-log-stamp{font:11.5px/20px 'Cascadia Mono',Consolas,monospace;color:var(--n7);font-variant-numeric:tabular-nums}.ds-log-stamp div:first-child{color:var(--n8)}.ds-log-text{margin:0;font:13.5px/1.6 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;color:var(--n10)}.ds-log-actions{text-align:right;color:var(--n7);opacity:0;transition:opacity .15s}.ds-log:hover .ds-log-actions,.ds-log:focus-within .ds-log-actions{opacity:1}"
+    },
+    {
+      "name": "Keycap",
+      "kind": "custom",
+      "refersTo": "keycap",
+      "description": "Shortcut key in broadcast mono.",
+      "html": "<kbd class=\"ds-kbd\">Ctrl</kbd> + <kbd class=\"ds-kbd\">B</kbd>",
+      "css": ".ds-kbd{display:inline-flex;align-items:center;justify-content:center;height:24px;min-width:24px;padding:0 6px;border-radius:6px;border:1px solid var(--n5);background:var(--n0);color:var(--n10);font:500 11px 'Cascadia Mono',Consolas,monospace;box-shadow:0 1.5px 0 var(--n5)}"
     }
   ],
   "narrative": {
-    "northStar": "Quiet by default",
-    "overview": "Sonora é um utilitário Windows que deve desaparecer no fluxo de trabalho. A janela principal organiza capacidade técnica com densidade de operação, mas sem se apresentar como dashboard: hierarquia vem de espaço, tipografia, divisores finos e divulgação progressiva.\n\nO mundo visual é light-first e quase monocromático. Warm white, branco, near-black e cinzas neutros sustentam toda a interface; cor aparece apenas quando um estado real precisa ser reconhecido. A exceção memorável é o Sonora Bar, uma pílula preta compacta que se expande conforme gravação, processamento, sucesso ou falha exigem informação.",
+    "northStar": "Estúdio no ar",
+    "overview": "Sonora is a quiet broadcast studio. Everything is off-air and neutral until you speak; the only thing that lights up is the tally lamp. The main window is where you review takes and tune the equipment, not a dashboard to admire: content sits in one ruled column, settings read top to bottom one row at a time, and every action that is not the point of the screen waits behind hover, focus, or an overflow menu.\n\nThe world lends the interface four things only: a single numbered grey ramp that inverts for the studio at night, a workhorse Windows sans for every word, a broadcast clock's tabular mono for time, duration and keys, and one signature move, the tally lamp. Navigation, controls and layout stay standard for a Windows productivity tool. The floating dictation pill (gadget) keeps its own black form over any application and shares only the state colours.",
     "keyCharacteristics": [
-      "Utilitário desktop-native, silencioso e orientado à tarefa.",
-      "Densidade Operate com controles compactos e áreas de trabalho legíveis.",
-      "Superfícies flat-by-default, separadas por tom e hairlines.",
-      "Cor reservada a estados semânticos.",
-      "Sonora Bar preto como assinatura recorrente e responsiva ao estado."
+      "One column, hairline rules, no cards and never a box inside a box.",
+      "Colour appears only when a real state needs it: live, standby, done, failure.",
+      "Actions are revealed on hover and focus; a row at rest shows only its content.",
+      "Every list of takes shares one anatomy: time over duration · text · actions.",
+      "Light and dark are the same ramp, read in opposite directions; the theme follows Windows by default."
     ],
     "rules": [
-      { "name": "The Semantic Color Rule", "body": "Fora dos neutros, cor só comunica um estado real; nunca funciona como decoração, branding ornamental ou preenchimento de seção.", "section": "colors" },
-      { "name": "The Workhorse Type Rule", "body": "Segoe faz o trabalho inteiro; use mono apenas quando a estrutura técnica ou tabular do valor melhora a leitura.", "section": "typography" },
-      { "name": "The Flat-by-Default Rule", "body": "Se uma superfície não flutua nem responde fisicamente ao usuário, use tom, borda ou divisor antes de considerar sombra.", "section": "elevation" }
+      {
+        "name": "The Quarantine Rule",
+        "body": "Outside the grey ramp, colour only ever names a state that is true right now. It is never a brand accent, a section fill or decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Ramp Rule",
+        "body": "Neutrals come only from the numbered ramp (n0–n10). Dark mode is the same ramp inverted, never a separate palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The Broadcast Clock Rule",
+        "body": "Mono is for measurement only: time, duration, keys, IDs and paths. Never use it to make a label look technical.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Eyebrow Rule",
+        "body": "A heading speaks for itself. No small label sits above a heading to introduce it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Off-Air Rule",
+        "body": "A surface that neither floats nor reports live state gets no shadow and no glow.",
+        "section": "elevation"
+      }
     ],
     "dos": [
-      "Do mantenha a maior parte de cada tela em Warm Canvas, Working White, near-black e cinzas neutros.",
-      "Do agrupe informação por espaço, hairlines e divulgação progressiva antes de criar novos containers.",
-      "Do preserve controles compactos, foco visível, estados disabled/loading e hit targets adequados.",
-      "Do deixe o Sonora Bar expandir somente quando o estado exige texto, waveform, recuperação ou confirmação.",
-      "Do use cor apenas para sucesso, gravação, aviso, erro ou destruição reais."
+      "Do keep every neutral on the n0–n10 ramp and let dark mode invert it.",
+      "Do reveal row and item actions on hover and focus, and name every icon-only control with an aria-label and a title.",
+      "Do separate groups with 48px of space and hairlines before reaching for a container.",
+      "Do use the log row anatomy (time over duration · text · actions) for any list of takes.",
+      "Do keep descriptions to one or two short lines under the setting they explain."
     ],
     "donts": [
-      "Don't reintroduza laranja, glow, gradientes ou uma estética dark dominante.",
-      "Don't transforme a home ou Configurações em dashboard de métricas, mosaico de cards ou showcase de capacidades.",
-      "Don't use sombra em superfícies estáticas quando tom, borda ou divisor resolve a hierarquia.",
-      "Don't aplique pílulas indiscriminadamente; a silhueta completa pertence principalmente ao gadget e a controles binários.",
-      "Don't copie logo, assets, tipografia ou branding de Wispr Flow ou de qualquer produto externo."
+      "Don't use colour for anything but live, standby, done or failure.",
+      "Don't put cards inside cards, or wrap a settings group in a box when hairlines already separate it.",
+      "Don't show a row of always-visible icon buttons on list items.",
+      "Don't add a small label above a heading, or a big-number metric trio as a page opener.",
+      "Don't reintroduce orange, glow outside the tally lamp, or gradients."
     ]
   }
 }

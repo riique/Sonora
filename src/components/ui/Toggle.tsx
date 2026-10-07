@@ -18,14 +18,14 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={
-        "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 " +
-        (checked ? "bg-[#242422]" : "bg-[#c9c9c2]")
+        "relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 " +
+        (checked ? "bg-ink" : "bg-line-strong")
       }
     >
       <span
         className={
-          "h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,.24)] transition-transform duration-150 " +
-          (checked ? "translate-x-5" : "translate-x-1")
+          "h-4 w-4 rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform duration-150 ease-out " +
+          (checked ? "translate-x-[19px]" : "translate-x-[3px]")
         }
       />
     </button>

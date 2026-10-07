@@ -11,11 +11,7 @@ export function Card({
   onClick?: () => void;
 } & Omit<HTMLAttributes<HTMLDivElement>, "onClick">) {
   return (
-    <div
-      onClick={onClick}
-      className={"surface " + className}
-      {...props}
-    >
+    <div onClick={onClick} className={"surface " + className} {...props}>
       {children}
     </div>
   );
