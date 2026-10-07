@@ -115,6 +115,9 @@ struct ResponseMessage {
 struct ProviderPreferences<'a> {
     only: [&'a str; 1],
     allow_fallbacks: bool,
+    /// Provider passthrough, keyed by provider slug (e.g. Groq's Whisper `prompt`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,13 +189,22 @@ fn model_looks_dedicated_stt(model: &str) -> bool {
     id.contains("whisper") || id.contains("chirp") || id.contains("transcribe")
 }
 
-fn whisper_provider_preferences(model: &str) -> Option<ProviderPreferences<'static>> {
+fn whisper_provider_preferences(
+    model: &str,
+    prompt: Option<&str>,
+) -> Option<ProviderPreferences<'static>> {
     model
         .to_ascii_lowercase()
         .contains("whisper")
-        .then_some(ProviderPreferences {
+        .then(|| ProviderPreferences {
             only: ["groq"],
             allow_fallbacks: false,
+            // OpenRouter ignores a top-level `prompt` for STT; Groq receives it only
+            // through provider options, where it biases spelling of known terms.
+            options: prompt
+                .map(str::trim)
+                .filter(|prompt| !prompt.is_empty())
+                .map(|prompt| serde_json::json!({ "groq": { "prompt": prompt } })),
         })
 }
 
@@ -450,6 +462,7 @@ pub async fn transcribe_audio(
     model: &str,
     api_key: &str,
     timeout: Duration,
+    vocabulary_prompt: Option<&str>,
 ) -> Result<OpenRouterGenerateResult, String> {
     if audio.is_empty() {
         return Err("OpenRouter STT: o áudio está vazio.".into());
@@ -484,7 +497,7 @@ pub async fn transcribe_audio(
         .text("model", model.to_string())
         .text("language", "pt")
         .part("file", part);
-    if let Some(provider) = whisper_provider_preferences(model) {
+    if let Some(provider) = whisper_provider_preferences(model, vocabulary_prompt) {
         form = form.text(
             "provider",
             serde_json::to_string(&provider).map_err(|error| error.to_string())?,
@@ -660,10 +673,22 @@ mod tests {
 
     #[test]
     fn whisper_transcription_is_pinned_to_groq_without_fallback() {
-        let value =
-            serde_json::to_value(whisper_provider_preferences("openai/whisper-large-v3").unwrap())
-                .expect("serialize provider preferences");
+        let value = serde_json::to_value(
+            whisper_provider_preferences("openai/whisper-large-v3", None).unwrap(),
+        )
+        .expect("serialize provider preferences");
         assert_eq!(value["only"][0], "groq");
         assert_eq!(value["allow_fallbacks"], false);
+        assert!(value.get("options").is_none());
+    }
+
+    #[test]
+    fn whisper_vocabulary_prompt_is_forwarded_to_groq_only() {
+        let value = serde_json::to_value(
+            whisper_provider_preferences("openai/whisper-large-v3-turbo", Some("Sonora, Tauri"))
+                .unwrap(),
+        )
+        .expect("serialize provider preferences");
+        assert_eq!(value["options"]["groq"]["prompt"], "Sonora, Tauri");
     }
 }

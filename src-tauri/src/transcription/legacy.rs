@@ -29,9 +29,16 @@ pub async fn transcribe_whisper_fallback_via_openrouter(
         "transcription: dispatching Whisper fallback to OpenRouter model={} provider=groq",
         model
     );
-    let generated =
-        crate::openrouter::transcribe_audio(bytes, ext, model, &api_key, Duration::from_secs(120))
-            .await?;
+    let vocabulary_hint = crate::vocabulary::whisper_prompt_hint(&state.vocabulary.read());
+    let generated = crate::openrouter::transcribe_audio(
+        bytes,
+        ext,
+        model,
+        &api_key,
+        Duration::from_secs(120),
+        vocabulary_hint.as_deref(),
+    )
+    .await?;
     Ok((model, generated))
 }
 

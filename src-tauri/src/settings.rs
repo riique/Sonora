@@ -479,7 +479,9 @@ pub fn save_context_preferences(value: crate::context::ContextPreferences) -> Re
 pub fn load_output_profiles() -> Vec<crate::output_policy::OutputProfile> {
     let settings = read();
     if settings.output_profiles_initialized {
-        settings.output_profiles
+        let mut profiles = settings.output_profiles;
+        crate::output_policy::migrate_builtin_formatting_levels(&mut profiles);
+        profiles
     } else {
         crate::output_policy::default_output_profiles()
     }

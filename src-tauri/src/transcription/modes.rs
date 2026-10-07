@@ -233,6 +233,7 @@ async fn openrouter_audio_result(
                 model,
                 api_key,
                 std::time::Duration::from_secs(120).max(adaptive_timeout),
+                None,
             )
             .await?
         }
@@ -439,12 +440,14 @@ pub async fn run_ultra_fast(
         "modes: UltraFast → OpenRouter STT model={} provider=groq (sanitizer off)",
         model
     );
+    let vocabulary_hint = crate::vocabulary::whisper_prompt_hint(&state.vocabulary.read());
     let generated = crate::openrouter::transcribe_audio(
         &audio,
         ext,
         model,
         &api_key,
         std::time::Duration::from_secs(120),
+        vocabulary_hint.as_deref(),
     )
     .await?;
     let text = generated.text;
@@ -2275,8 +2278,12 @@ pub(crate) fn finalize_product_result(
         .or_else(|| result.gemini_text.clone())
         .unwrap_or_else(|| result.final_text.clone());
     let refined_candidate = crate::transcription::remove_known_transcription_artifacts(&text);
+    // Strict vocabulary is a deliberate user rewrite: guard against the raw text with
+    // the same literals applied, or a term like "NextJS" → "Next.js" would make the
+    // guard discard the whole refinement.
+    let (guard_source, _) = crate::vocabulary::apply_strict_literals(&raw_text, &vocab);
     let refinement_guard =
-        crate::transformations::enforce_protected_spans(&raw_text, &refined_candidate);
+        crate::transformations::enforce_protected_spans(&guard_source, &refined_candidate);
     result.warnings.extend(refinement_guard.warnings.clone());
     result.transcript.set_raw_once(raw_text.clone());
     result.transcript.refined = Some(refinement_guard.text.clone());
@@ -2310,7 +2317,10 @@ pub(crate) fn finalize_product_result(
     result.warnings.extend(formatted.warnings);
 
     let code_guard_started = std::time::Instant::now();
-    let guarded = crate::transformations::enforce_protected_spans(&raw_text, &formatted.text);
+    // Formatting must not damage spans of its own input. Guarding against the raw
+    // recognizer text here would throw away refinement, vocabulary and backtrack.
+    let guarded =
+        crate::transformations::enforce_protected_spans(&backtracked.text, &formatted.text);
     let code_guard_ms = code_guard_started.elapsed().as_millis() as u64;
     result.timings.code_guard_ms = Some(code_guard_ms);
     result.add_stage(StageRecord::completed(StageKind::CodeGuard, code_guard_ms));
