@@ -81,7 +81,7 @@ export function VoiceInsights({ data, reload, developerMode }: {
       {portrait !== excerpt && <details className="voice-full-portrait"><summary>Ler retrato completo</summary><p>{portrait}</p></details>}
       <div className="voice-portrait__action">
         {data.profile_enabled ? <>
-          <Button variant="primary" disabled={busy || !data.profile_generation_ready} aria-describedby="voice-profile-progress" onClick={() => setConfirm(true)}>
+          <Button variant={data.profile_generation_ready && !busy ? "primary" : "secondary"} disabled={busy || !data.profile_generation_ready} aria-describedby="voice-profile-progress" onClick={() => setConfirm(true)}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
             {busy ? "Criando seu retrato…" : profile ? "Atualizar meu retrato" : "Criar meu retrato"}
           </Button>
@@ -121,7 +121,7 @@ export function VoiceInsights({ data, reload, developerMode }: {
           <Fact label="Variedade de palavras" value={data.language.vocabulary_variety_label} />
         </dl></section>
         {correction && <section><h3>Uma correção que se repete</h3><p className="mt-3 text-[14px]"><span className="text-muted line-through">{correction.before}</span> → <strong>{correction.after}</strong></p>
-          {correction.in_vocabulary ? <p className="mt-3 inline-flex items-center gap-1 text-[13px] text-[#25613f]"><Check className="h-4 w-4" aria-hidden /> Já está no vocabulário</p>
+          {correction.in_vocabulary ? <p className="mt-3 inline-flex items-center gap-1 text-[13px] text-cue"><Check className="h-4 w-4" aria-hidden /> Já está no vocabulário</p>
             : <Button className="mt-3" disabled={vocabBusy} onClick={addVocabulary}>{vocabBusy ? "Adicionando…" : "Adicionar ao vocabulário"}</Button>}
         </section>}
         <section><h3>Seu microfone</h3><p className="mt-3 text-[13px] leading-6 text-muted">{!audio.analyzed_sessions

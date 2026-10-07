@@ -41,7 +41,7 @@ O aplicativo combina uma interface desktop local de gerenciamento com um gadget 
 
 - Nome do produto: Sonora; a marca compacta pode usar “Sonora”.
 - Identidade própria, sem copiar marca, logo ou assets do Wispr Flow.
-- O redesign substitui integralmente o mundo dark/orange por uma interface light-first, quase monocromática, silenciosa, premium e desktop-native.
+- Interface quase monocromática, silenciosa, premium e desktop-native, com tema claro e escuro que segue o Windows por padrão; sem laranja.
 - Princípio visual e comportamental vinculante: “Quiet by default. Information appears when needed.”
 
 ## Evidence on Hand

@@ -63,7 +63,7 @@ export function TitleBar() {
         <TitleBarButton
           label="Minimizar"
           onClick={handleMinimize}
-          hoverClass="hover:bg-[#e8e8e3] hover:text-ink"
+          hoverClass="hover:bg-fill hover:text-ink"
         >
           <Minus className="h-4 w-4" strokeWidth={2} />
         </TitleBarButton>
@@ -71,7 +71,7 @@ export function TitleBar() {
         <TitleBarButton
           label={maximized ? "Restaurar" : "Maximizar"}
           onClick={handleToggleMaximize}
-          hoverClass="hover:bg-[#e8e8e3] hover:text-ink"
+          hoverClass="hover:bg-fill hover:text-ink"
         >
           {maximized ? (
             <Copy className="h-3.5 w-3.5 -scale-x-100" strokeWidth={2} />

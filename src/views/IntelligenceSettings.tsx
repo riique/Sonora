@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Loader2, Plus, Trash2, X } from "lucide-react";
+import { AlertCircle, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import {
   getContextPreferences, getOutputPolicyConfig, getSnippets, getVocabularySuggestions,
   resolveVocabularySuggestion, setContextPreferences, setOutputPolicyConfig, setSnippets,
@@ -7,11 +7,10 @@ import {
   type OutputProfile, type VoiceSnippet,
 } from "../lib/tauri";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
+import { Input, Select, Textarea } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
-import { PreferenceRow } from "../components/ui/Surface";
+import { ErrorState, PreferenceRow, RowGroup, Section } from "../components/ui/Surface";
 
-const selectClass = "h-9 rounded-[9px] border border-line bg-white px-3 text-[13px] text-ink outline-hidden focus:border-[#9b9c95]";
 const sourceLabels: Record<ContextSourceKind, string> = {
   application: "Aplicativo", window_title: "Título da janela", domain: "Domínio",
   selection: "Seleção", caret_context: "Texto próximo ao cursor", clipboard: "Clipboard",
@@ -111,93 +110,155 @@ export function IntelligenceSettings() {
       persistSnapshot(snapshot, latestFingerprint.current);
     }
   }, [persistSnapshot]);
-  if ((!context || !policy) && saveError) return <div role="alert" className="space-y-3 text-sm"><p>{saveError}</p><Button onClick={() => window.location.reload()}>Recarregar preferências</Button></div>;
+  if ((!context || !policy) && saveError) return <ErrorState><p>{saveError}</p><button type="button" className="mt-1 font-medium underline" onClick={() => window.location.reload()}>Recarregar preferências</button></ErrorState>;
   if (!context || !policy) return <p className="text-[13px] text-muted">Carregando preferências…</p>;
   const updateProfile = (index: number, change: Partial<OutputProfile>) => setPolicy({ ...policy, profiles: policy.profiles.map((profile, i) => i === index ? { ...profile, ...change } : profile) });
+  const updateSnippet = (index: number, change: Partial<VoiceSnippet>) => setSnippetItems(snippets.map((item, i) => i === index ? { ...item, ...change } : item));
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h3 className="text-[15px] font-semibold text-ink">Saída do ditado</h3>
-        <div className="mt-3 divide-y divide-line border-y border-line">
-          <PreferenceRow title="Nível de formatação" description="Literal preserva a fala; Smart corrige casos claros; Aggressive permite reorganização maior.">
-            <select aria-label="Nível de formatação" className={selectClass} value={policy.formatting_level} onChange={(event) => setPolicy({ ...policy, formatting_level: event.target.value as OutputPolicyConfig["formatting_level"] })}>
+    <div>
+      <Section title="Saída do ditado">
+        <RowGroup>
+          <PreferenceRow title="Formatação" description="Literal preserva a fala; Smart corrige casos claros; Aggressive reorganiza mais." htmlFor="formatting-level">
+            <Select id="formatting-level" aria-label="Nível de formatação" className="w-[180px]" value={policy.formatting_level} onChange={(event) => setPolicy({ ...policy, formatting_level: event.target.value as OutputPolicyConfig["formatting_level"] })}>
               <option value="literal">Literal</option><option value="smart">Smart</option><option value="aggressive">Aggressive</option>
-            </select>
+            </Select>
           </PreferenceRow>
-          <PreferenceRow title="Destino" description="Scratchpad salva uma nota no Sonora e nunca cola no aplicativo em foco.">
-            <select aria-label="Destino do ditado" className={selectClass} value={policy.destination} onChange={(event) => setPolicy({ ...policy, destination: event.target.value as OutputPolicyConfig["destination"] })}>
-              <option value="focused_field">Campo em foco</option><option value="clipboard_only">Somente clipboard</option><option value="scratchpad">Scratchpad</option>
-            </select>
+          <PreferenceRow title="Destino" description="Salvar como nota guarda o texto em Histórico › Notas e nunca cola." htmlFor="output-destination">
+            <Select id="output-destination" aria-label="Destino do ditado" className="w-[180px]" value={policy.destination} onChange={(event) => setPolicy({ ...policy, destination: event.target.value as OutputPolicyConfig["destination"] })}>
+              <option value="focused_field">Colar no campo em foco</option><option value="clipboard_only">Só copiar</option><option value="scratchpad">Salvar como nota</option>
+            </Select>
           </PreferenceRow>
-          <PreferenceRow title="Override temporário" description="Tem precedência sobre domínio e aplicativo até ser removido.">
-            <select aria-label="Style temporário" className={selectClass} value={policy.temporary_override ?? ""} onChange={(event) => setPolicy({ ...policy, temporary_override: event.target.value || null })}>
+          <PreferenceRow title="Style fixo" description="Ignora a detecção por aplicativo até você voltar para Automático." htmlFor="temporary-style">
+            <Select id="temporary-style" aria-label="Style temporário" className="w-[180px]" value={policy.temporary_override ?? ""} onChange={(event) => setPolicy({ ...policy, temporary_override: event.target.value || null })}>
               <option value="">Automático</option>{policy.profiles.filter((profile) => profile.enabled).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-            </select>
+            </Select>
           </PreferenceRow>
-        </div>
-      </section>
+        </RowGroup>
+      </Section>
 
-      <section>
-        <h3 className="text-[15px] font-semibold text-ink">Contexto e privacidade</h3>
-        <p className="mt-1 text-[13px] leading-5 text-muted">Metadados são locais. Texto da tela só vai à nuvem com opt-in global e por fonte.</p>
-        <div className="mt-3 divide-y divide-line border-y border-line">
-          {context.sources.map((source, index) => (
-            <PreferenceRow key={source.source} title={sourceLabels[source.source]} description={source.privacy === "cloud_allowed" ? "Pode ser enviado como contexto não confiável e delimitado." : "Permanece local e efêmero."}>
-              <div className="flex items-center gap-3">
-                <select aria-label={`Privacidade de ${sourceLabels[source.source]}`} className={selectClass} disabled={!source.enabled} value={source.privacy} onChange={(event) => setContext({ ...context, sources: context.sources.map((item, i) => i === index ? { ...item, privacy: event.target.value as typeof item.privacy } : item) })}>
+      <Section
+        title="Styles por aplicativo"
+        description="Ajustam formatação e tom conforme onde você dita. Precedência: style fixo, domínio, aplicativo e padrão."
+        action={<Button size="sm" onClick={() => setPolicy({ ...policy, profiles: [...policy.profiles, { id: `profile-${Date.now()}`, name: "Novo style", enabled: true, matcher: { processes: [], executables: [], window_titles: [], domains: [] }, formatting_level: null, content_type: null, style_instruction: null, allow_context_to_cloud: false }] })}><Plus className="h-3.5 w-3.5" aria-hidden />Novo style</Button>}
+      >
+        {policy.profiles.length === 0 ? <p className="border-y border-line py-4 text-[13px] text-muted">Nenhum style. Sem styles, todos os aplicativos usam a saída padrão.</p> : (
+          <div className="hairline-list border-y border-line">
+            {policy.profiles.map((profile, index) => {
+              const where = [...profile.matcher.processes, ...profile.matcher.domains].slice(0, 3).join(", ");
+              return (
+                <details key={profile.id} className="group/p py-1">
+                  <summary className="flex cursor-pointer items-center justify-between gap-4 py-3">
+                    <span className="min-w-0">
+                      <span className={"block text-[13px] font-medium " + (profile.enabled ? "text-ink" : "text-muted")}>{profile.name}{!profile.enabled && <span className="ml-2 font-normal">· pausado</span>}</span>
+                      <span className="block truncate text-[12.5px] text-muted">{where || "Sem aplicativos ou domínios definidos"}</span>
+                    </span>
+                    <span className="text-[12.5px] text-muted group-hover/p:text-ink group-open/p:hidden">Editar</span>
+                    <span className="hidden text-[12.5px] text-muted group-open/p:inline">Fechar</span>
+                  </summary>
+                  <div className="mb-4 mt-1 space-y-4">
+                    <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                      <label><span className="field-label">Nome</span><Input aria-label="Nome do style" value={profile.name} onChange={(event) => updateProfile(index, { name: event.target.value })} /></label>
+                      <label><span className="field-label">ID</span><Input className="font-mono text-[12px]" value={profile.id} onChange={(event) => updateProfile(index, { id: event.target.value })} /></label>
+                      <label><span className="field-label">Processos</span><Input aria-label="Processos do style" value={profile.matcher.processes.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, processes: split(event.target.value) } })} placeholder="Code.exe, chrome.exe" /></label>
+                      <label><span className="field-label">Domínios</span><Input aria-label="Domínios do style" value={profile.matcher.domains.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, domains: split(event.target.value) } })} placeholder="chatgpt.com" /></label>
+                      <label><span className="field-label">Títulos de janela contendo</span><Input aria-label="Títulos de janela do style" value={profile.matcher.window_titles.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, window_titles: split(event.target.value) } })} placeholder="Codex, E-mail" /></label>
+                      <label><span className="field-label">Executáveis</span><Input aria-label="Executáveis do style" value={profile.matcher.executables.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, executables: split(event.target.value) } })} placeholder="C:\Apps\app.exe" /></label>
+                      <label><span className="field-label">Formatação</span><Select aria-label="Formatação do style" wrapperClassName="w-full" className="w-full" value={profile.formatting_level ?? ""} onChange={(event) => updateProfile(index, { formatting_level: (event.target.value || null) as OutputProfile["formatting_level"] })}><option value="">Herdar</option><option value="literal">Literal</option><option value="smart">Smart</option><option value="aggressive">Aggressive</option></Select></label>
+                      <label><span className="field-label">Conteúdo</span><Select aria-label="Tipo de conteúdo do style" wrapperClassName="w-full" className="w-full" value={profile.content_type ?? ""} onChange={(event) => updateProfile(index, { content_type: event.target.value || null })}><option value="">Automático</option><option value="programming">Programação</option><option value="study">Estudo</option></Select></label>
+                    </div>
+                    <label className="block"><span className="field-label">Instrução de estilo</span><Textarea aria-label="Instrução do style" className="min-h-20" value={profile.style_instruction ?? ""} onChange={(event) => updateProfile(index, { style_instruction: event.target.value || null })} placeholder="Ex.: frases curtas, sem emojis" /></label>
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-wrap items-center gap-6">
+                        <span className="flex items-center gap-2.5 text-[12.5px] text-strong"><Toggle label={`Ativar ${profile.name}`} checked={profile.enabled} onChange={(enabled) => updateProfile(index, { enabled })} />Ativo</span>
+                        <label className="flex items-center gap-2 text-[12.5px] text-strong"><input type="checkbox" checked={profile.allow_context_to_cloud ?? false} onChange={(event) => updateProfile(index, { allow_context_to_cloud: event.target.checked })} />Permitir contexto na nuvem neste style</label>
+                      </div>
+                      <Button size="sm" variant="danger" onClick={() => setPolicy({ ...policy, profiles: policy.profiles.filter((_, i) => i !== index) })}><Trash2 className="h-3.5 w-3.5" aria-hidden />Remover style</Button>
+                    </div>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Snippets por voz"
+        description="Diga o gatilho e o Sonora insere o texto completo. Correspondência exata e local."
+        action={<Button size="sm" onClick={() => setSnippetItems([...snippets, { id: `snippet-${Date.now()}`, trigger: "", expansion: "", enabled: true, require_activation_phrase: true }])}><Plus className="h-3.5 w-3.5" aria-hidden />Novo snippet</Button>}
+      >
+        {snippets.length === 0 ? <p className="border-y border-line py-4 text-[13px] text-muted">Nenhum snippet ainda.</p> : (
+          <div className="hairline-list border-y border-line">
+            {snippets.map((snippet, index) => (
+              <div key={snippet.id} className="group py-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] items-center gap-2 max-[720px]:grid-cols-1">
+                  <Input aria-label="Trigger do snippet" value={snippet.trigger} onChange={(event) => updateSnippet(index, { trigger: event.target.value })} placeholder="Gatilho falado" />
+                  <Input aria-label="Expansão do snippet" value={snippet.expansion} onChange={(event) => updateSnippet(index, { expansion: event.target.value })} placeholder="Texto inserido" />
+                  <button type="button" aria-label="Remover snippet" title="Remover snippet" className="icon-button h-9 w-9 hover:text-live" onClick={() => setSnippetItems(snippets.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" aria-hidden /></button>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-5 text-[12.5px] text-muted">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={snippet.enabled} onChange={(event) => updateSnippet(index, { enabled: event.target.checked })} />Ativo</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={snippet.require_activation_phrase} onChange={(event) => updateSnippet(index, { require_activation_phrase: event.target.checked })} />Exigir “snippet” ou “expandir” antes do gatilho</label>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {suggestions.length > 0 && (
+        <Section title="Sugestões de vocabulário" description="Correções que você fez três vezes ou mais.">
+          <div className="hairline-list border-y border-line">
+            {suggestions.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-5 py-3">
+                <p className="text-[13px] text-ink"><span className="text-muted line-through decoration-line-strong">{event.before}</span> → <span className="font-medium">{event.after}</span><span className="timecode ml-2">{event.count}×</span></p>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => void resolveVocabularySuggestion(event.id, false).then(() => setSuggestions((items) => items.filter((item) => item.id !== event.id))).catch((error) => { setSaveStatus("error"); setSaveError(String(error)); })}>Ignorar</Button>
+                  <Button size="sm" onClick={() => void resolveVocabularySuggestion(event.id, true).then(() => setSuggestions((items) => items.filter((item) => item.id !== event.id))).catch((error) => { setSaveStatus("error"); setSaveError(String(error)); })}><Check className="h-3.5 w-3.5" aria-hidden />Adicionar</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <Section title="Contexto e privacidade" description="O Sonora pode usar o que está ao redor do cursor para acertar termos. Metadados ficam no computador; texto da tela só vai à nuvem com permissão geral e por fonte.">
+        <RowGroup>
+          <PreferenceRow title="Permitir contexto na nuvem" description="Ainda exige que cada fonte abaixo esteja como “Nuvem autorizada”.">
+            <Toggle label="Permitir contexto na nuvem" checked={context.allow_context_to_cloud} onChange={(allow_context_to_cloud) => setContext({ ...context, allow_context_to_cloud })} />
+          </PreferenceRow>
+        </RowGroup>
+        <details className="group/c mt-1">
+          <summary className="inline-flex cursor-pointer items-center gap-1.5 py-3 text-[12.5px] font-medium text-muted hover:text-ink">
+            <span className="inline-block h-1.5 w-1.5 -rotate-45 border-b-[1.5px] border-r-[1.5px] border-current transition-transform group-open/c:rotate-45" aria-hidden />
+            Fontes de contexto e limites
+          </summary>
+          <RowGroup>
+            {context.sources.map((source, index) => (
+              <PreferenceRow key={source.source} title={sourceLabels[source.source]} description={!source.enabled ? "Desativada." : source.privacy === "cloud_allowed" ? "Pode ir à nuvem, delimitada e marcada como não confiável." : source.privacy === "ephemeral_local" ? "Usada só neste computador e descartada em seguida." : "Somente metadados."}>
+                <Select aria-label={`Privacidade de ${sourceLabels[source.source]}`} className="w-[170px]" disabled={!source.enabled} value={source.privacy} onChange={(event) => setContext({ ...context, sources: context.sources.map((item, i) => i === index ? { ...item, privacy: event.target.value as typeof item.privacy } : item) })}>
                   <option value="metadata_only">Só metadados</option><option value="ephemeral_local">Local efêmero</option><option value="cloud_allowed">Nuvem autorizada</option>
-                </select>
+                </Select>
                 <Toggle label={`Ativar ${sourceLabels[source.source]}`} checked={source.enabled} onChange={(enabled) => setContext({ ...context, sources: context.sources.map((item, i) => i === index ? { ...item, enabled } : item) })} />
-              </div>
+              </PreferenceRow>
+            ))}
+            <PreferenceRow title="Guardar contexto textual" description="Desligado por padrão. Aplicativo e domínio continuam nos detalhes técnicos.">
+              <Toggle label="Persistir contexto textual" checked={context.persist_raw_context} onChange={(persist_raw_context) => setContext({ ...context, persist_raw_context })} />
             </PreferenceRow>
-          ))}
-          <PreferenceRow title="Permitir contexto na nuvem" description="Ainda exige que cada fonte esteja marcada como Nuvem autorizada."><Toggle label="Permitir contexto na nuvem" checked={context.allow_context_to_cloud} onChange={(allow_context_to_cloud) => setContext({ ...context, allow_context_to_cloud })} /></PreferenceRow>
-          <PreferenceRow title="Persistir contexto textual" description="Desligado por padrão. Metadados de aplicativo/domínio continuam disponíveis no Inspector."><Toggle label="Persistir contexto textual" checked={context.persist_raw_context} onChange={(persist_raw_context) => setContext({ ...context, persist_raw_context })} /></PreferenceRow>
-          <PreferenceRow title="Limite por fonte" description="Quantidade máxima de caracteres de seleção, cursor ou clipboard."><Input aria-label="Limite de caracteres por fonte" className="w-24" type="number" min={100} max={4000} value={context.max_context_chars} onChange={(event) => setContext({ ...context, max_context_chars: Number(event.target.value) })} /></PreferenceRow>
-        </div>
-        <details className="mt-3 text-[12px] text-muted"><summary className="cursor-pointer font-medium text-[#555650]">Integração com Chrome/Chromium</summary><p className="mt-2 max-w-[76ch] leading-5">A extensão mínima e o Native Messaging Host estão em browser-extension e native-messaging-host. Eles enviam somente domínio, URL sem query, seleção e até 800 caracteres próximos ao campo.</p></details>
-      </section>
+            <PreferenceRow title="Limite por fonte" description="Máximo de caracteres de seleção, cursor ou clipboard (100 a 4.000)." htmlFor="context-limit">
+              <Input id="context-limit" aria-label="Limite de caracteres por fonte" className="w-24 text-right tabular-nums" type="number" min={100} max={4000} value={context.max_context_chars} onChange={(event) => setContext({ ...context, max_context_chars: Number(event.target.value) })} />
+            </PreferenceRow>
+          </RowGroup>
+          <p className="mt-3 max-w-[64ch] text-[12px] leading-5 text-muted">No Chrome e Chromium, a extensão em <span className="font-mono">browser-extension</span> e o host em <span className="font-mono">native-messaging-host</span> enviam só domínio, URL sem query, seleção e até 800 caracteres próximos ao campo.</p>
+        </details>
+      </Section>
 
-      <section>
-        <div className="flex items-center justify-between"><div><h3 className="text-[15px] font-semibold text-ink">Styles por aplicativo</h3><p className="mt-1 text-[13px] text-muted">Precedência: override temporário, domínio, aplicativo e padrão.</p></div><Button size="sm" onClick={() => setPolicy({ ...policy, profiles: [...policy.profiles, { id: `profile-${Date.now()}`, name: "Novo style", enabled: true, matcher: { processes: [], executables: [], window_titles: [], domains: [] }, formatting_level: null, content_type: null, style_instruction: null, allow_context_to_cloud: false }] })}><Plus className="h-4 w-4" />Adicionar</Button></div>
-        <div className="mt-4 space-y-3">
-          {policy.profiles.map((profile, index) => (
-            <details key={profile.id} className="rounded-[10px] border border-line bg-white px-4 py-3" open={index === 0}>
-              <summary className="cursor-pointer text-[13px] font-medium text-ink">{profile.name}<span className="ml-2 text-[11px] font-normal text-muted">{profile.id}</span></summary>
-              <div className="mt-4 grid grid-cols-2 gap-3 max-[900px]:grid-cols-1">
-                <Input aria-label="Nome do style" value={profile.name} onChange={(event) => updateProfile(index, { name: event.target.value })} placeholder="Nome" />
-                <Input value={profile.id} onChange={(event) => updateProfile(index, { id: event.target.value })} placeholder="ID" />
-                <Input aria-label="Processos do style" value={profile.matcher.processes.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, processes: split(event.target.value) } })} placeholder="Processos: Code.exe, chrome.exe" />
-                <Input aria-label="Executáveis do style" value={profile.matcher.executables.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, executables: split(event.target.value) } })} placeholder="Executáveis: C:\\Apps\\app.exe" />
-                <Input aria-label="Títulos de janela do style" value={profile.matcher.window_titles.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, window_titles: split(event.target.value) } })} placeholder="Títulos contendo: Codex, E-mail" />
-                <Input aria-label="Domínios do style" value={profile.matcher.domains.join(", ")} onChange={(event) => updateProfile(index, { matcher: { ...profile.matcher, domains: split(event.target.value) } })} placeholder="Domínios: chatgpt.com" />
-                <select aria-label="Formatação do style" className={selectClass} value={profile.formatting_level ?? ""} onChange={(event) => updateProfile(index, { formatting_level: (event.target.value || null) as OutputProfile["formatting_level"] })}><option value="">Herdar formatação</option><option value="literal">Literal</option><option value="smart">Smart</option><option value="aggressive">Aggressive</option></select>
-                <select aria-label="Tipo de conteúdo do style" className={selectClass} value={profile.content_type ?? ""} onChange={(event) => updateProfile(index, { content_type: event.target.value || null })}><option value="">Conteúdo automático</option><option value="programming">Programação</option><option value="study">Estudo</option></select>
-                <Input aria-label="Instrução do style" value={profile.style_instruction ?? ""} onChange={(event) => updateProfile(index, { style_instruction: event.target.value || null })} placeholder="Instrução de estilo" />
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-4"><div className="flex items-center gap-5"><Toggle label={`Ativar ${profile.name}`} checked={profile.enabled} onChange={(enabled) => updateProfile(index, { enabled })} /><label className="flex items-center gap-2 text-[12px] text-muted"><input type="checkbox" checked={profile.allow_context_to_cloud ?? false} onChange={(event) => updateProfile(index, { allow_context_to_cloud: event.target.checked })} />Permitir contexto cloud neste style</label></div><Button size="sm" variant="danger" onClick={() => setPolicy({ ...policy, profiles: policy.profiles.filter((_, i) => i !== index) })}><Trash2 className="h-4 w-4" />Remover</Button></div>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between"><div><h3 className="text-[15px] font-semibold text-ink">Snippets por voz</h3><p className="mt-1 text-[13px] text-muted">Matching exato, local e aplicado depois dos modelos.</p></div><Button size="sm" onClick={() => setSnippetItems([...snippets, { id: `snippet-${Date.now()}`, trigger: "", expansion: "", enabled: true, require_activation_phrase: true }])}><Plus className="h-4 w-4" />Adicionar</Button></div>
-        <div className="mt-4 space-y-3">{snippets.map((snippet, index) => <div key={snippet.id} className="rounded-[10px] border border-line bg-white p-4"><div className="grid grid-cols-[1fr_1.5fr_auto] gap-3 max-[900px]:grid-cols-1"><Input aria-label="Trigger do snippet" value={snippet.trigger} onChange={(event) => setSnippetItems(snippets.map((item, i) => i === index ? { ...item, trigger: event.target.value } : item))} placeholder="Trigger falado" /><Input aria-label="Expansão do snippet" value={snippet.expansion} onChange={(event) => setSnippetItems(snippets.map((item, i) => i === index ? { ...item, expansion: event.target.value } : item))} placeholder="Expansão literal" /><Button aria-label="Remover snippet" size="sm" variant="danger" onClick={() => setSnippetItems(snippets.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-3 flex items-center gap-5 text-[12px] text-muted"><label className="flex items-center gap-2"><input type="checkbox" checked={snippet.enabled} onChange={(event) => setSnippetItems(snippets.map((item, i) => i === index ? { ...item, enabled: event.target.checked } : item))} />Ativo</label><label className="flex items-center gap-2"><input type="checkbox" checked={snippet.require_activation_phrase} onChange={(event) => setSnippetItems(snippets.map((item, i) => i === index ? { ...item, require_activation_phrase: event.target.checked } : item))} />Exigir “snippet” ou “expandir”</label></div></div>)}</div>
-      </section>
-
-      <section>
-        <h3 className="text-[15px] font-semibold text-ink">Sugestões de vocabulário</h3>
-        <p className="mt-1 text-[13px] text-muted">Somente correções lexicais repetidas três vezes aparecem aqui.</p>
-        <div className="mt-3 divide-y divide-line border-y border-line">{suggestions.length === 0 ? <p className="py-5 text-[13px] text-muted">Nenhuma sugestão pendente.</p> : suggestions.map((event) => <div key={event.id} className="flex items-center justify-between gap-5 py-4"><p className="text-[13px] text-ink">“{event.before}” → <span className="font-medium">“{event.after}”</span><span className="ml-2 text-muted">{event.count}×</span></p><div className="flex gap-1"><Button size="sm" onClick={() => void resolveVocabularySuggestion(event.id, true).then(() => setSuggestions((items) => items.filter((item) => item.id !== event.id))).catch((error) => { setSaveStatus("error"); setSaveError(String(error)); })}><Check className="h-4 w-4" />Adicionar</Button><Button size="sm" variant="ghost" onClick={() => void resolveVocabularySuggestion(event.id, false).then(() => setSuggestions((items) => items.filter((item) => item.id !== event.id))).catch((error) => { setSaveStatus("error"); setSaveError(String(error)); })}><X className="h-4 w-4" />Ignorar</Button></div></div>)}</div>
-      </section>
-
-      <div className="sticky bottom-4 flex justify-end" aria-live="polite">
+      <div className="pointer-events-none sticky bottom-5 mt-8 flex justify-end" aria-live="polite">
         {saveStatus !== "idle" && (
-          <div className={`inline-flex min-h-9 items-center gap-2 rounded-[9px] border px-3 text-[12px] shadow-xs ${saveStatus === "error" ? "border-red-200 bg-red-50 text-red-700" : saveStatus === "invalid" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-line bg-white text-muted"}`} title={saveError ?? undefined}>
-            {saveStatus === "pending" || saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saveStatus === "error" || saveStatus === "invalid" ? <AlertCircle className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
-            {saveStatus === "pending" ? "Aguardando alterações…" : saveStatus === "saving" ? "Salvando automaticamente…" : saveStatus === "invalid" ? "Complete os campos para salvar" : saveStatus === "error" ? "Falha no salvamento automático" : "Alterações salvas"}
+          <div className={`pointer-events-auto inline-flex h-8 items-center gap-2 rounded-full border px-3.5 text-[12px] shadow-menu ${saveStatus === "error" ? "border-live/30 bg-live-wash text-live" : saveStatus === "invalid" ? "border-standby/30 bg-standby-wash text-standby" : "border-line bg-raised text-muted"}`} title={saveError ?? undefined}>
+            {saveStatus === "pending" || saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : saveStatus === "error" || saveStatus === "invalid" ? <AlertCircle className="h-3.5 w-3.5" aria-hidden /> : <Check className="h-3.5 w-3.5 text-cue" aria-hidden />}
+            {saveStatus === "pending" ? "Alterações pendentes" : saveStatus === "saving" ? "Salvando…" : saveStatus === "invalid" ? saveError ?? "Complete os campos para salvar" : saveStatus === "error" ? "Falha ao salvar" : "Salvo"}
           </div>
         )}
       </div>

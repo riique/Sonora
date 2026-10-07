@@ -164,6 +164,11 @@ export interface RecordingStatus {
   busy: boolean;
 }
 
+/** Milliseconds since the active recording started (0 when idle). */
+export async function getRecordingElapsed(): Promise<number> {
+  return invoke<number>("get_recording_elapsed");
+}
+
 /** Monotonic recording lifecycle snapshot from the backend. */
 export async function getRecordingStatus(): Promise<RecordingStatus> {
   return invoke<RecordingStatus>("get_recording_status");

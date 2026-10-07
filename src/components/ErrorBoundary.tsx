@@ -38,7 +38,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex h-screen w-screen flex-col items-center justify-center gap-6 bg-canvas text-ink">
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#fff1ef] text-[#a72a21]">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-live-wash text-live">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -57,14 +57,14 @@ export class ErrorBoundary extends Component<Props, State> {
               problema persistir, reinicie o aplicativo.
             </p>
             {this.state.error && (
-              <pre className="mt-2 max-w-lg overflow-auto rounded-lg bg-[#252522] p-4 text-xs text-[#e8e8e2]">
+              <pre className="mt-2 max-w-lg overflow-auto rounded-lg bg-fill p-4 text-xs text-strong">
                 {this.state.error.message}
               </pre>
             )}
           </div>
           <button
             onClick={this.handleReload}
-            className="rounded-[9px] bg-[#1d1d1b] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-black"
+            className="rounded-[9px] bg-ink px-5 py-2 text-sm font-medium text-canvas transition-colors hover:bg-strong"
           >
             Tentar novamente
           </button>

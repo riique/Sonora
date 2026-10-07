@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import { GadgetApp, GadgetPreviewApp } from "./views/GadgetView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { initTheme } from "./lib/theme";
 import "./index.css";
 
 // The same bundle is loaded by both the main window and the always-on-top
@@ -23,6 +24,8 @@ if (isGadget) {
   // The gadget window must be see-through so only its pill is painted.
   document.documentElement.style.background = "transparent";
   document.body.style.background = "transparent";
+} else {
+  initTheme();
 }
 
 async function renderApp() {
