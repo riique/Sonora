@@ -428,13 +428,6 @@ pub fn foreground_delivery_target_matches(expected: ForegroundTarget) -> bool {
     }
 }
 
-/// Verifies that a delivery target is still the exact foreground window and
-/// process captured when recording started. Missing Windows metadata degrades
-/// conservatively instead of allowing a blind paste into another field.
-pub fn foreground_target_matches(snapshot: &ContextSnapshot) -> bool {
-    foreground_delivery_target_matches(ForegroundTarget::from_snapshot(snapshot))
-}
-
 impl ContextSnapshot {
     pub fn persisted_metadata(&self) -> Self {
         let mut safe = self.clone();

@@ -96,7 +96,7 @@ export function AtalhosView() {
                       onKeyDown={(event) => void handleKeyDown(binding.id, event)}
                       onBlur={() => setCapturing(null)}
                       value="Pressione as teclas…"
-                      className="h-9 w-44 rounded-[8px] border border-[#8f9089] bg-white px-3 text-center text-[12px] text-ink outline-none"
+                      className="h-9 w-44 rounded-[8px] border border-[#8f9089] bg-white px-3 text-center text-[12px] text-ink outline-hidden"
                     />
                   ) : <KbdCombo keys={toKeys(config[binding.id])} />}
                 </div>

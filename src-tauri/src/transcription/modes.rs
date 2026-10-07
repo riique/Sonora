@@ -20,7 +20,6 @@ use crate::transcription::legacy::transcribe_bytes;
 use crate::transcription::telemetry::{
     compute_realtime_factor, est_throughput, est_total_tokens, log_latency,
 };
-use crate::transcription::types::AcousticOutcome;
 
 fn provider_history_label(provider: GeminiProvider) -> &'static str {
     match provider {
@@ -2461,16 +2460,6 @@ fn formatting_target_for_result(result: &PipelineRun) -> crate::transformations:
         crate::transformations::FormattingTarget::Markdown
     } else {
         crate::transformations::FormattingTarget::PlainText
-    }
-}
-
-#[allow(dead_code)]
-pub fn acoustic_from_whisper(text: String) -> AcousticOutcome {
-    AcousticOutcome {
-        whisper_text: text,
-        deepgram_text: String::new(),
-        effective_dual: false,
-        deepgram_ran: false,
     }
 }
 

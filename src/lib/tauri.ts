@@ -27,15 +27,6 @@ export type TranscriptionMode =
   | "precise"
   | "ultra-precise";
 
-export interface EngineConfigPayload {
-  engine: TranscriptionEngine;
-  sanitizer: SanitizerModel;
-  dual_engine: boolean;
-  reasoning_enabled: boolean;
-  reasoning_effort: string;
-  deepgram_mode: DeepgramMode;
-}
-
 export interface EngineConfigSnapshot {
   engine: TranscriptionEngine;
   sanitizer: string;
@@ -98,12 +89,6 @@ export interface ApiKeysPayload {
   meta: string[];
 }
 
-export async function updateEngineConfig(
-  payload: EngineConfigPayload,
-): Promise<EngineConfigSnapshot> {
-  return invoke<EngineConfigSnapshot>("update_engine_config", { payload });
-}
-
 export async function saveApiKeys(payload: ApiKeysPayload): Promise<void> {
   await invoke<void>("save_api_keys", { payload });
 }
@@ -163,11 +148,6 @@ export async function cancelRecording(): Promise<void> {
   await invoke<void>("cancel_recording");
 }
 
-/** Returns the current recording flag from the backend. */
-export async function getRecordingState(): Promise<boolean> {
-  return invoke<boolean>("get_recording_state");
-}
-
 export type RecordingPhase =
   | "idle"
   | "starting"
@@ -187,11 +167,6 @@ export interface RecordingStatus {
 /** Monotonic recording lifecycle snapshot from the backend. */
 export async function getRecordingStatus(): Promise<RecordingStatus> {
   return invoke<RecordingStatus>("get_recording_status");
-}
-
-/** Milliseconds elapsed since the current recording began (backend truth). */
-export async function getRecordingElapsed(): Promise<number> {
-  return invoke<number>("get_recording_elapsed");
 }
 
 /** Returns the currently active transcription engine and sanitizer config. */
@@ -397,11 +372,6 @@ export interface PipelineProgressEvent {
   message?: string | null;
 }
 
-/** Returns the full persisted transcription history, newest first. */
-export async function getHistory(): Promise<HistoryEntry[]> {
-  return invoke<HistoryEntry[]>("get_history");
-}
-
 export interface AudioStorageConfig {
   custom_directory?: string | null;
   effective_directory: string;
@@ -500,16 +470,6 @@ export interface VocabularyTerm {
   enabled: boolean;
 }
 
-/** Legacy: enabled canonical spellings only. */
-export async function getCustomWords(): Promise<string[]> {
-  return invoke<string[]>("get_custom_words");
-}
-
-/** Legacy: replace vocabulary with simple words. */
-export async function setCustomWords(words: string[]): Promise<string[]> {
-  return invoke<string[]>("set_custom_words", { words });
-}
-
 export async function getVocabulary(): Promise<VocabularyTerm[]> {
   return invoke<VocabularyTerm[]>("get_vocabulary");
 }
@@ -538,16 +498,6 @@ export async function getSanitizerEnabled(): Promise<boolean> {
 /** Toggles the semantic validator on/off and persists the choice. */
 export async function setSanitizerEnabled(value: boolean): Promise<void> {
   await invoke<void>("set_sanitizer_enabled", { value });
-}
-
-/** Returns the gadget compact-mode preference. */
-export async function getCompactMode(): Promise<boolean> {
-  return invoke<boolean>("get_compact_mode");
-}
-
-/** Persists the gadget compact-mode preference and notifies the gadget window. */
-export async function setCompactMode(value: boolean): Promise<void> {
-  await invoke<void>("set_compact_mode", { value });
 }
 
 export type WidgetVisibilityMode = "auto" | "always";
@@ -615,15 +565,6 @@ export async function acknowledgeGadgetRendered(
   return invoke<boolean>("acknowledge_gadget_rendered", { presentation, rect });
 }
 
-/**
- * Reports the gadget's visible-pill rectangle to the backend so the overlay
- * window can be made click-through everywhere except over the pill (preventing
- * the transparent area from swallowing nearby clicks).
- */
-export async function setGadgetHitRect(rect: GadgetHitRect): Promise<void> {
-  await invoke<void>("set_gadget_hit_rect", { rect });
-}
-
 /* ------------------------------- Events ------------------------------- */
 
 export type RecordingEventType =
@@ -680,11 +621,6 @@ export async function stopMicTest(): Promise<void> {
 /** Escuta o nível de áudio emitido pelo teste de microfone (0.0 a 1.0). */
 export function onMicTestLevel(handler: (level: number) => void): Promise<UnlistenFn> {
   return listen<number>("mic-test-level", (event) => handler(event.payload));
-}
-
-/** Escuta mudanças no estado de transcrição (loading do gadget). */
-export function onTranscribingEvent(handler: (transcribing: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>("transcribing", (event) => handler(event.payload));
 }
 
 /* ---------------------------- Voice Insights ---------------------------- */
@@ -889,7 +825,6 @@ export interface InsightsResponse {
 }
 
 export const getInsights = (period: InsightPeriod) => invoke<InsightsResponse>("get_insights", { period });
-export const getInsightsBackfillStatus = () => invoke<BackfillStatus>("get_insights_backfill_status");
 export const setInsightsBackfillPaused = (paused: boolean) => invoke<BackfillStatus>("set_insights_backfill_paused", { paused });
 export const setAiVoiceProfileEnabled = (enabled: boolean) => invoke<void>("set_ai_voice_profile_enabled", { enabled });
 export const generateAiVoiceProfile = () => invoke<VoiceProfile>("generate_ai_voice_profile");

@@ -115,24 +115,6 @@ pub fn save_original(id: &str, ext: &str, bytes: &[u8]) -> Option<String> {
     }
 }
 
-/// Removes the canonical history audio and its optional `.original` sidecar.
-pub fn remove_with_original(path: &str) {
-    let _guard = lock().lock();
-    let canonical = PathBuf::from(path);
-    remove_file_if_present(&canonical);
-    if let Some(original) = original_sidecar_path(&canonical) {
-        remove_file_if_present(&original);
-    }
-}
-
-fn remove_file_if_present(path: &PathBuf) {
-    if let Err(error) = fs::remove_file(path) {
-        if error.kind() != std::io::ErrorKind::NotFound {
-            log::warn!("audio_store: failed to delete {:?}: {}", path, error);
-        }
-    }
-}
-
 fn original_sidecar_path(canonical: &std::path::Path) -> Option<PathBuf> {
     let stem = canonical.file_stem()?.to_string_lossy();
     let extension = canonical.extension()?.to_string_lossy();
@@ -163,22 +145,6 @@ pub fn read_original_or_canonical(path: &str) -> Result<Vec<u8>, String> {
         }
     }
     read(path)
-}
-
-/// Removes every file in the effective audio directory. Kept for maintenance
-/// callers that explicitly own the whole directory; history cleanup deletes
-/// only the exact files referenced by its entries.
-#[allow(dead_code)]
-pub fn clear() {
-    let _guard = lock().lock();
-    let Some(dir) = effective_directory() else {
-        return;
-    };
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let _ = fs::remove_file(entry.path());
-        }
-    }
 }
 
 /// Maps a file extension to the MIME type sent to the transcription engines.

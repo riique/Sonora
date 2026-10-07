@@ -55,10 +55,6 @@ const BATCH_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Hard deadline for a full streaming session (connect + send + final wait).
 const STREAMING_SESSION_TIMEOUT: Duration = Duration::from_secs(90);
 
-/// Soft drain budget after `CloseStream` (engineering target for short clips).
-#[allow(dead_code)]
-const STREAMING_DRAIN_SOFT_TIMEOUT: Duration = Duration::from_millis(1_500);
-
 /// Hard deadline to wait for the server after `CloseStream` (Metadata/close).
 const STREAMING_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 
