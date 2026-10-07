@@ -67,9 +67,13 @@ fn validate(snippets: &[VoiceSnippet]) -> Result<(), String> {
     Ok(())
 }
 
+/// Expands snippets in the final text. A whole utterance equal to a trigger
+/// expands to the snippet (unless it requires the activation phrase); inside a
+/// sentence only the explicit "snippet <trigger>" / "expandir <trigger>" forms
+/// expand, so ordinary speech never triggers by accident.
 pub fn resolve(text: &str, snippets: &[VoiceSnippet]) -> Option<(String, String)> {
     let spoken = normalize(text.trim_matches(|c: char| matches!(c, '.' | '!' | '?' | ',' | ';')));
-    snippets.iter().find_map(|snippet| {
+    let whole = snippets.iter().find_map(|snippet| {
         if !snippet.enabled {
             return None;
         }
@@ -82,6 +86,81 @@ pub fn resolve(text: &str, snippets: &[VoiceSnippet]) -> Option<(String, String)
             spoken == trigger || spoken == explicit || spoken == expand
         };
         matches.then(|| (snippet.expansion.clone(), snippet.id.clone()))
+    });
+    whole.or_else(|| expand_inline(text, snippets))
+}
+
+fn expand_inline(text: &str, snippets: &[VoiceSnippet]) -> Option<(String, String)> {
+    let mut output = text.to_string();
+    let mut used = Vec::new();
+    let mut ordered = snippets
+        .iter()
+        .filter(|snippet| snippet.enabled && !snippet.trigger.trim().is_empty())
+        .collect::<Vec<_>>();
+    // Longest trigger first so "meu github pessoal" wins over "meu github".
+    ordered.sort_by_key(|snippet| std::cmp::Reverse(snippet.trigger.chars().count()));
+    for snippet in ordered {
+        let trigger = normalize(&snippet.trigger);
+        for prefix in ["snippet", "expandir"] {
+            let phrase = format!("{prefix} {trigger}");
+            while let Some((start, end)) = find_phrase(&output, &phrase) {
+                // Swallow the punctuation a recognizer adds right after the phrase.
+                let end = end
+                    + output[end..]
+                        .chars()
+                        .take_while(|character| matches!(character, '.' | ','))
+                        .map(char::len_utf8)
+                        .sum::<usize>();
+                output.replace_range(start..end, &snippet.expansion);
+                if !used.contains(&snippet.id) {
+                    used.push(snippet.id.clone());
+                }
+            }
+        }
+    }
+    (!used.is_empty()).then(|| (output, used.join(",")))
+}
+
+/// Case-insensitive, whitespace-tolerant, word-bounded phrase search returning
+/// byte offsets in `text`.
+fn find_phrase(text: &str, phrase: &str) -> Option<(usize, usize)> {
+    let words = phrase.split_whitespace().collect::<Vec<_>>();
+    let tokens = text
+        .char_indices()
+        .filter(|(index, character)| {
+            !character.is_whitespace()
+                && text[..*index]
+                    .chars()
+                    .next_back()
+                    .is_none_or(char::is_whitespace)
+        })
+        .map(|(start, _)| {
+            let end = text[start..]
+                .find(char::is_whitespace)
+                .map_or(text.len(), |offset| start + offset);
+            (start, end)
+        })
+        .collect::<Vec<_>>();
+    let clean = |value: &str| {
+        value
+            .trim_matches(|character: char| !character.is_alphanumeric())
+            .to_lowercase()
+    };
+    tokens.windows(words.len()).find_map(|window| {
+        let matches = window
+            .iter()
+            .zip(&words)
+            .all(|((start, end), word)| clean(&text[*start..*end]) == clean(word));
+        if !matches {
+            return None;
+        }
+        let start = window[0].0;
+        let last = window[words.len() - 1];
+        // Keep trailing punctuation of the last word out of the match only
+        // when it is not part of the phrase itself.
+        let last_word = &text[last.0..last.1];
+        let trimmed = last_word.trim_end_matches(|character: char| !character.is_alphanumeric());
+        Some((start, last.0 + trimmed.len()))
     })
 }
 
@@ -118,6 +197,16 @@ mod tests {
     #[test]
     fn normal_sentence_is_not_a_false_positive() {
         assert!(resolve("acesse meu github quando puder", &[github()]).is_none());
+    }
+
+    #[test]
+    fn explicit_phrase_expands_inside_a_sentence() {
+        let (text, id) =
+            resolve("Meu perfil é Snippet meu GitHub, pode olhar.", &[github()]).unwrap();
+        assert_eq!(text, "Meu perfil é https://github.com/example pode olhar.");
+        assert_eq!(id, "github");
+        let (text, _) = resolve("veja expandir meu github", &[github()]).unwrap();
+        assert_eq!(text, "veja https://github.com/example");
     }
 
     #[test]

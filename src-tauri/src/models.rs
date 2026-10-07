@@ -512,6 +512,17 @@ fn default_reasoning_effort() -> String {
 pub struct ShortcutConfig {
     pub toggle: String,
     pub cancel: String,
+    /// Voice command: speak an instruction applied to the selected text.
+    /// Empty disables it.
+    #[serde(default = "default_command_shortcut")]
+    pub command: String,
+    /// Record only while the shortcut is held down.
+    #[serde(default)]
+    pub hold_to_talk: bool,
+}
+
+fn default_command_shortcut() -> String {
+    "Control+Shift+B".to_string()
 }
 
 impl Default for ShortcutConfig {
@@ -519,8 +530,16 @@ impl Default for ShortcutConfig {
         Self {
             toggle: "Control+B".to_string(),
             cancel: "Control+Q".to_string(),
+            command: default_command_shortcut(),
+            hold_to_talk: false,
         }
     }
+}
+
+/// Text captured from the focused app when a voice command starts.
+#[derive(Debug, Clone, Default)]
+pub struct CommandRequest {
+    pub selection: Option<String>,
 }
 
 /// Payload received from the frontend when the user saves API keys
@@ -601,7 +620,6 @@ pub struct AppState {
     /// Live Deepgram WebSocket session (streaming_final + mic). Opened when
     /// recording starts and finished/aborted when recording stops/cancels.
     /// `None` while idle or in batch mode.
-    pub deepgram_live: Mutex<Option<crate::deepgram::DeepgramLiveSession>>,
     /// When `true` (default), the acoustic transcription is passed through the
     /// Groq Chat Completions sanitizer (Stage 2) for orthographic cleanup and
     /// formatting. When `false`, the **raw** acoustic transcription is copied
@@ -636,6 +654,10 @@ pub struct AppState {
     pub output_profiles: RwLock<Vec<crate::output_policy::OutputProfile>>,
     pub formatting_level: RwLock<crate::output_policy::FormattingLevel>,
     pub dictation_destination: RwLock<crate::output_policy::DictationDestination>,
+    pub features: RwLock<crate::assist::FeatureSettings>,
+    /// Set when the current recording was started by the voice-command shortcut:
+    /// the transcript becomes an instruction applied to this selection.
+    pub command_request: Mutex<Option<CommandRequest>>,
     pub temporary_profile_override: RwLock<Option<String>>,
     /// Failure journal handed from provider orchestration to history when a
     /// top-level Result must remain backward-compatible with `String` errors.
@@ -678,7 +700,6 @@ impl AppState {
             dual_engine: RwLock::new(false),
             reasoning_enabled: RwLock::new(false),
             deepgram_mode: RwLock::new(DeepgramMode::default()),
-            deepgram_live: Mutex::new(None),
             sanitizer_enabled: RwLock::new(true),
             reasoning_effort: RwLock::new("medium".to_string()),
             vocabulary: RwLock::new(Vec::new()),
@@ -692,6 +713,8 @@ impl AppState {
             recording_session: Mutex::new(None),
             output_profiles: RwLock::new(Vec::new()),
             formatting_level: RwLock::new(crate::output_policy::FormattingLevel::default()),
+            features: RwLock::new(crate::assist::FeatureSettings::default()),
+            command_request: Mutex::new(None),
             dictation_destination: RwLock::new(
                 crate::output_policy::DictationDestination::default(),
             ),
@@ -719,10 +742,6 @@ impl AppState {
 
     pub fn next_google_key(&self) -> Option<String> {
         Self::next_key(&self.api_keys.read().google, &self.google_key_cursor)
-    }
-
-    pub fn next_deepgram_key(&self) -> Option<String> {
-        Self::next_key(&self.api_keys.read().deepgram, &self.deepgram_key_cursor)
     }
 
     pub fn next_openrouter_key(&self) -> Option<String> {
@@ -762,6 +781,7 @@ impl AppState {
         *snapshot.output_profiles.write() = self.output_profiles.read().clone();
         *snapshot.formatting_level.write() = *self.formatting_level.read();
         *snapshot.dictation_destination.write() = *self.dictation_destination.read();
+        *snapshot.features.write() = self.features.read().clone();
         *snapshot.temporary_profile_override.write() =
             self.temporary_profile_override.read().clone();
         *snapshot.recording_session.lock() = self.recording_session.lock().clone();

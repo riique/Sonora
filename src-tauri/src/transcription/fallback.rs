@@ -1,7 +1,5 @@
 //! Raw-text selection and error mapping for the legacy pipeline.
 
-use crate::models::TranscriptionEngine;
-
 /// Caps the length of an API error body so a giant JSON blob does not bloat
 /// the history card. Truncates on a UTF-8 char boundary.
 pub fn truncate_err_body(body: &str, max_chars: usize) -> String {
@@ -86,51 +84,6 @@ pub fn coalesce_empty_final(finalized: String, whisper_text: &str, deepgram_text
     finalized
 }
 
-/// Map a single-engine transcript into the correct sanitizer slot.
-pub fn single_engine_slots(engine: TranscriptionEngine, text: String) -> (String, String, bool) {
-    match engine {
-        TranscriptionEngine::DeepgramNova3 => (String::new(), text, true),
-        TranscriptionEngine::GroqWhisper => (text, String::new(), false),
-        other => {
-            log::warn!(
-                "transcription: single_engine_slots for unexpected engine {:?}",
-                other
-            );
-            (text, String::new(), false)
-        }
-    }
-}
-
-/// Resolve dual-mode STT pair results into slots + flags.
-pub fn resolve_dual_results(
-    groq_res: Result<String, String>,
-    deepgram_res: Result<String, String>,
-) -> Result<(String, String, bool, bool), String> {
-    match (groq_res, deepgram_res) {
-        (Ok(g), Ok(d)) => Ok((g, d, true, true)),
-        (Ok(g), Err(de_err)) => {
-            log::warn!(
-                "transcription: Deepgram falhou no modo duplo, usando apenas Groq Whisper: {}",
-                de_err
-            );
-            Ok((g, String::new(), false, false))
-        }
-        (Err(groq_err), Ok(d)) => {
-            log::warn!(
-                "transcription: Groq Whisper falhou no modo duplo, usando apenas Deepgram: {}",
-                groq_err
-            );
-            Ok((String::new(), d, false, true))
-        }
-        (Err(groq_err), Err(de_err)) => Err(format!(
-            "Ambos os motores de transcrição falharam no modo duplo:\n\
-             • Groq Whisper: {}\n\
-             • Deepgram Nova-3: {}",
-            groq_err, de_err
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,30 +105,6 @@ mod tests {
         assert_eq!(out, "w");
         let out = coalesce_empty_final("keep".into(), "w", "d");
         assert_eq!(out, "keep");
-    }
-
-    #[test]
-    fn single_slots_do_not_duplicate() {
-        let (w, d, dg) = single_engine_slots(TranscriptionEngine::GroqWhisper, "hi".into());
-        assert_eq!(w, "hi");
-        assert!(d.is_empty());
-        assert!(!dg);
-
-        let (w, d, dg) = single_engine_slots(TranscriptionEngine::DeepgramNova3, "hi".into());
-        assert!(w.is_empty());
-        assert_eq!(d, "hi");
-        assert!(dg);
-    }
-
-    #[test]
-    fn dual_partial_and_both_fail() {
-        let ok = resolve_dual_results(Ok("a".into()), Err("x".into())).unwrap();
-        assert_eq!(ok.0, "a");
-        assert!(ok.1.is_empty());
-        assert!(!ok.2 && !ok.3);
-
-        let err = resolve_dual_results(Err("e1".into()), Err("e2".into()));
-        assert!(err.unwrap_err().contains("Groq Whisper"));
     }
 
     #[test]

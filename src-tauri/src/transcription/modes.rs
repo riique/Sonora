@@ -10,13 +10,13 @@ use crate::gemini::{
     GeminiGenerateResult, GeminiOperation, GeminiPrompt, GeminiStageTiming, TranscribeRequest,
     PRECISE_PROMPT_VERSION, TRANSCRIBE_PROMPT_VERSION, ULTRAPRECISE_PROMPT_VERSION,
 };
-use crate::models::{AppState, HistoryEntry, SanitizerDebug, TranscriptionEngine};
+use crate::models::{AppState, HistoryEntry, SanitizerDebug};
 use crate::pipeline_contract::{GeminiProvider, TranscriptionMode};
 use crate::pipeline_run::{
     AttemptResultMetadata, AttemptStatus, AudioTransport, CostKind, CostRecord, PipelineError,
     PipelineErrorKind, PipelineRun, ProviderAttempt, StageKind, StageRecord, UsageRecord,
 };
-use crate::transcription::legacy::transcribe_bytes;
+use crate::transcription::legacy::transcribe_groq_whisper;
 use crate::transcription::telemetry::{
     compute_realtime_factor, est_throughput, est_total_tokens, log_latency,
 };
@@ -419,7 +419,139 @@ fn apply_timing_from_gemini(result: &mut PipelineRun, g: &crate::gemini::GeminiG
     }
 }
 
-/// UltraFast: audio → OpenRouter STT (Whisper on Groq) → text (no sanitizer).
+/// Usage record for a text-only assist call (quick refine, voice command).
+pub(crate) fn assist_usage(out: &crate::assist::LlmText) -> UsageRecord {
+    UsageRecord {
+        input_tokens: out.input_tokens,
+        output_tokens: out.output_tokens,
+        cost: out
+            .cost_usd
+            .map_or_else(CostRecord::default, |amount| CostRecord {
+                kind: CostKind::Actual,
+                amount_usd: Some(amount),
+                source: Some("openrouter_response_usage".into()),
+            }),
+        ..Default::default()
+    }
+}
+
+/// Records a successful assist call as a provider attempt plus a refinement stage,
+/// so the history shows which model touched the text and what it cost.
+pub(crate) fn record_assist_call(run: &mut PipelineRun, id: &str, out: &crate::assist::LlmText) {
+    let usage = assist_usage(out);
+    let mut attempt = completed_attempt(
+        id,
+        out.provider,
+        out.model,
+        AudioTransport::InlineBase64,
+        out.duration_ms,
+        out.text.len(),
+        0,
+    );
+    attempt.usage = usage.clone();
+    run.attempts.push(attempt);
+    let mut stage = StageRecord::completed(StageKind::SemanticRefinement, out.duration_ms);
+    stage.id = format!("stage-{id}");
+    stage.provider = Some(out.provider.into());
+    stage.model = Some(out.model.into());
+    stage.usage = usage;
+    run.journal.push(stage);
+}
+
+/// UltraFast: optional fast LLM pass so vocabulary, style instruction and
+/// context also apply to the Whisper-only mode. Failures keep the Whisper text.
+async fn apply_quick_refine(state: &AppState, run: &mut PipelineRun) {
+    if !state.features.read().quick_refine || !crate::assist::has_text_llm(state) {
+        return;
+    }
+    let raw = run.final_text.clone();
+    let glossary = crate::vocabulary::format_glossary_for_prompt(&state.vocabulary.read());
+    let style = trusted_style_instruction(state);
+    let context = authorized_context_block(state);
+    let (system, user) = crate::assist::quick_refine_prompt(&crate::assist::QuickRefineInput {
+        raw: &raw,
+        glossary: &glossary,
+        style: style.as_deref(),
+        context: context.as_deref(),
+    });
+    crate::pipeline_run::emit_pipeline_progress(
+        state,
+        crate::pipeline_run::PipelineProgressEvent {
+            kind: crate::pipeline_run::PipelineProgressKind::Refining,
+            message: Some("Refinando com IA".into()),
+            ..Default::default()
+        },
+    );
+    match crate::assist::text_llm(state, &system, &user, std::time::Duration::from_secs(12)).await {
+        Ok(out) if crate::assist::plausible_refinement(&raw, &out.text) => {
+            run.final_text = out.text.trim().to_string();
+            run.stages.push(format!("quick_refine:{}", out.provider));
+            record_assist_call(run, "attempt-quick-refine", &out);
+        }
+        Ok(_) => {
+            log::warn!("modes: quick refine output rejected (looked like an answer)");
+            run.warnings.push("quick_refine_rejected".into());
+        }
+        Err(error) => {
+            log::warn!("modes: quick refine failed: {error}");
+            run.warnings.push("quick_refine_failed".into());
+        }
+    }
+}
+
+/// Last resort when every cloud provider failed: whisper.cpp on this computer.
+async fn offline_fallback(
+    state: &AppState,
+    audio: Vec<u8>,
+    mode: TranscriptionMode,
+    cloud_error: &str,
+) -> Option<PipelineRun> {
+    let model = state.features.read().offline_model;
+    emit_fallback_progress(state, "nuvem", "Whisper local", cloud_error);
+    let started = std::time::Instant::now();
+    match crate::local_whisper::transcribe(model, audio).await {
+        Ok(text) => {
+            let ms = started.elapsed().as_millis() as u64;
+            let model_label = format!("whisper.cpp/{model:?}").to_lowercase();
+            let reason = format!("offline: {cloud_error}");
+            Some(PipelineRun {
+                final_text: text.clone(),
+                mode,
+                model: model_label.clone(),
+                whisper_text: Some(text.clone()),
+                stages: vec!["offline_whisper".into()],
+                history_engine_label: "offline/whisper.cpp".into(),
+                used_fallback: true,
+                fallback_reason: Some(reason.clone()),
+                fallback: crate::pipeline_run::FallbackRecord {
+                    used: true,
+                    forced: false,
+                    reason: Some(reason),
+                    from_provider: Some("cloud".into()),
+                    to_provider: Some("local".into()),
+                },
+                attempts: vec![completed_attempt(
+                    "attempt-offline",
+                    "local",
+                    &model_label,
+                    AudioTransport::RawBinary,
+                    ms,
+                    text.len(),
+                    0,
+                )],
+                transcription_latency_ms: ms,
+                total_pipeline_ms: Some(ms),
+                ..Default::default()
+            })
+        }
+        Err(error) => {
+            log::warn!("modes: offline fallback failed: {error}");
+            None
+        }
+    }
+}
+
+/// UltraFast: audio → OpenRouter STT (Whisper on Groq) → optional quick LLM refine.
 pub async fn run_ultra_fast(
     state: &Arc<AppState>,
     audio: Vec<u8>,
@@ -487,7 +619,7 @@ pub async fn run_ultra_fast(
         },
         ..Default::default()
     };
-    Ok(PipelineRun {
+    let mut run = PipelineRun {
         final_text: text.trim().to_string(),
         mode: TranscriptionMode::UltraFast,
         model: model.into(),
@@ -513,7 +645,9 @@ pub async fn run_ultra_fast(
             ..Default::default()
         },
         ..Default::default()
-    })
+    };
+    apply_quick_refine(state, &mut run).await;
+    Ok(run)
 }
 
 /// FastAccurate: Gemini (inline or Files) + glossary + strict literals.
@@ -1024,14 +1158,7 @@ pub async fn run_precise(
     let mime_w = mime.to_string();
     let whisper_fut = async move {
         let tw = std::time::Instant::now();
-        let r = transcribe_bytes(
-            &state_w,
-            whisper_audio,
-            &file_name_w,
-            &mime_w,
-            TranscriptionEngine::GroqWhisper,
-        )
-        .await;
+        let r = transcribe_groq_whisper(&state_w, whisper_audio, &file_name_w, &mime_w).await;
         (r, tw.elapsed().as_millis() as u64)
     };
 
@@ -1544,20 +1671,13 @@ pub async fn run_ultra_precise(
     let mime_w = mime.to_string();
     let chain_fut = async move {
         let tw = std::time::Instant::now();
-        let wr = transcribe_bytes(
-            &state_w,
-            whisper_audio,
-            &file_name_w,
-            &mime_w,
-            TranscriptionEngine::GroqWhisper,
-        )
-        .await;
+        let wr = transcribe_groq_whisper(&state_w, whisper_audio, &file_name_w, &mime_w).await;
         let whisper_ms = tw.elapsed().as_millis() as u64;
         match wr {
             Ok(w) if !w.trim().is_empty() => {
                 let w = w.trim().to_string();
                 let ts = std::time::Instant::now();
-                let sanitize = crate::transcription::run_sanitize(&state_w, &w, "", false).await;
+                let sanitize = crate::transcription::run_sanitize(&state_w, &w).await;
                 let sanitizer_ms = ts.elapsed().as_millis() as u64;
                 Ok((w, sanitize, whisper_ms, sanitizer_ms))
             }
@@ -2061,20 +2181,6 @@ pub fn mode_failed_history(
     }
 }
 
-pub fn should_use_product_mode(state: &AppState) -> bool {
-    is_product_mode(*state.transcription_mode.read())
-}
-
-fn is_product_mode(mode: TranscriptionMode) -> bool {
-    matches!(
-        mode,
-        TranscriptionMode::UltraFast
-            | TranscriptionMode::FastAccurate
-            | TranscriptionMode::Precise
-            | TranscriptionMode::UltraPrecise
-    )
-}
-
 pub async fn run_product_mode(
     state: &Arc<AppState>,
     audio: Vec<u8>,
@@ -2098,6 +2204,10 @@ pub async fn run_product_mode_with_duration(
     let state = &snapshot;
     state.pending_failed_pipeline_run.lock().take();
     let mode = *state.transcription_mode.read();
+    let offline_audio = (ext.eq_ignore_ascii_case("wav")
+        && state.features.read().offline_fallback
+        && crate::local_whisper::is_installed(state.features.read().offline_model))
+    .then(|| audio.clone());
     let result = match mode {
         TranscriptionMode::UltraFast => run_ultra_fast(state, audio, ext, duration_ms).await,
         TranscriptionMode::FastAccurate => {
@@ -2109,6 +2219,15 @@ pub async fn run_product_mode_with_duration(
         TranscriptionMode::UltraPrecise => {
             run_ultra_precise(state, audio, ext, file_name, mime, duration_ms).await
         }
+    };
+    let result = match result {
+        Ok(result) => Ok(result),
+        Err(error) => match offline_audio {
+            Some(audio) => offline_fallback(state, audio, mode, &error)
+                .await
+                .ok_or(error),
+            None => Err(error),
+        },
     };
     let result = match result {
         Ok(result) => result,
@@ -2477,18 +2596,6 @@ fn formatting_target_for_result(result: &PipelineRun) -> crate::transformations:
 mod tests {
     use super::*;
     use crate::pipeline_contract::TranscriptionMode;
-
-    #[test]
-    fn every_available_mode_is_a_product_pipeline() {
-        for mode in [
-            TranscriptionMode::UltraFast,
-            TranscriptionMode::FastAccurate,
-            TranscriptionMode::Precise,
-            TranscriptionMode::UltraPrecise,
-        ] {
-            assert!(is_product_mode(mode));
-        }
-    }
 
     #[test]
     fn mode_history_fields() {

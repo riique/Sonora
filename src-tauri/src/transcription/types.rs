@@ -2,18 +2,6 @@
 
 use crate::models::SanitizerDebug;
 
-/// Result of Stage 1 (acoustic STT), before sanitization.
-#[derive(Debug, Clone)]
-pub struct AcousticOutcome {
-    pub whisper_text: String,
-    pub deepgram_text: String,
-    /// True only when both engines succeeded in dual mode.
-    pub effective_dual: bool,
-    /// True when Deepgram actually produced a transcript (or was attempted
-    /// successfully on the Deepgram-only path).
-    pub deepgram_ran: bool,
-}
-
 /// Result of Stage 2 (sanitizer / pick_raw), ready for clipboard + history.
 #[derive(Debug, Clone)]
 pub struct SanitizeOutcome {

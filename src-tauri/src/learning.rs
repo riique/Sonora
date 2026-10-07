@@ -132,8 +132,15 @@ pub fn suggestions() -> Vec<CorrectionEvent> {
             Vec::new()
         })
         .into_iter()
-        .filter(|event| event.count >= 3 && event.status == SuggestionStatus::Pending)
+        .filter(is_suggestion)
         .collect()
+}
+
+/// Repeated corrections become vocabulary suggestions on the second occurrence.
+pub const SUGGESTION_THRESHOLD: u32 = 2;
+
+pub fn is_suggestion(event: &CorrectionEvent) -> bool {
+    event.count >= SUGGESTION_THRESHOLD && event.status == SuggestionStatus::Pending
 }
 
 /// Read-only snapshot used by the local Insights projection. Correction text

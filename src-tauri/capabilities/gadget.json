@@ -19,7 +19,6 @@
     "allow-retry-transcription",
     "allow-retry-transcription-with-fallback",
     "allow-set-gadget-visual-state",
-    "allow-acknowledge-gadget-rendered",
-    "allow-set-gadget-hit-rect"
+    "allow-acknowledge-gadget-rendered"
   ]
 }

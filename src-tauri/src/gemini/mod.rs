@@ -8,7 +8,7 @@
 //!
 //! Direct Generative Language API only. No OpenRouter.
 
-mod client;
+pub(crate) mod client;
 mod files;
 mod prompts;
 mod pronunciation;

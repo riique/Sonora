@@ -274,15 +274,6 @@ pub fn format_glossary_for_prompt(terms: &[VocabularyTerm]) -> String {
     lines.join("\n")
 }
 
-/// Deepgram keyterms: enabled canonicals (cap length for query string safety).
-pub fn deepgram_keyterms(terms: &[VocabularyTerm], max: usize) -> Vec<String> {
-    enabled_terms(terms)
-        .into_iter()
-        .map(|t| t.canonical.clone())
-        .take(max)
-        .collect()
-}
-
 /// Deterministic post-pass: replace unambiguous aliases with canonical for
 /// **strict + enabled** terms only. Case-insensitive; supports multi-word aliases.
 /// Does not rewrite free text globally or force weak matches.

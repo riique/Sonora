@@ -1,9 +1,5 @@
-//! Legacy transcription orchestration (Phase 02).
-//!
-//! Extracted from `audio.rs` so capture/WAV/clipboard stay separate from
-//! engine selection, dual STT, sanitization, fallbacks and history metrics.
-//! Behaviour matches the pre-extraction path; future modes will plug in here
-//! without growing the capture module again.
+//! Transcription orchestration: product modes, the shared Groq sanitizer,
+//! history entry helpers and telemetry. Capture/WAV/clipboard live in `audio.rs`.
 
 pub mod fallback;
 pub mod legacy;
@@ -13,19 +9,13 @@ pub mod telemetry;
 pub mod types;
 
 pub use crate::pipeline_run::PipelineRun;
-pub use fallback::{coalesce_empty_final, pick_raw_acoustic, single_engine_slots};
-pub use legacy::{
-    deepgram_from_live_or_posthoc, run_acoustic_file, run_acoustic_mic, run_dual_posthoc,
-    transcribe_bytes, transcribe_whisper_fallback_via_openrouter,
-};
+pub use fallback::{coalesce_empty_final, pick_raw_acoustic};
+pub use legacy::{transcribe_groq_whisper, transcribe_whisper_fallback_via_openrouter};
 pub use modes::{
     mode_failed_history, mode_result_to_history, run_product_mode, run_product_mode_with_duration,
-    should_use_product_mode,
 };
-pub use pipeline::{
-    build_failed_entry, build_success_entry, emit_saved, run_sanitize, update_failed_entry,
-};
-pub use types::{AcousticOutcome, SanitizeOutcome};
+pub use pipeline::{emit_saved, run_sanitize, update_failed_entry};
+pub use types::SanitizeOutcome;
 
 const KNOWN_TRANSCRIPTION_ARTIFACTS: &[&str] = &["Legenda por Sônia Ruberti"];
 
