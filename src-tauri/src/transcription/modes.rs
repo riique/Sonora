@@ -2464,16 +2464,6 @@ fn formatting_target_for_result(result: &PipelineRun) -> crate::transformations:
     }
 }
 
-#[allow(dead_code)]
-pub fn acoustic_from_whisper(text: String) -> AcousticOutcome {
-    AcousticOutcome {
-        whisper_text: text,
-        deepgram_text: String::new(),
-        effective_dual: false,
-        deepgram_ran: false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

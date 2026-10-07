@@ -214,13 +214,6 @@ pub fn load_compact() -> bool {
     read().compact_mode
 }
 
-/// Persists the compact-mode flag, preserving any other settings.
-pub fn save_compact(value: bool) -> Result<(), String> {
-    update(|s| {
-        s.compact_mode = value;
-    })
-}
-
 /// Returns the persisted input-device selection (defaults to `None`).
 pub fn load_input_device() -> Option<String> {
     read().input_device
@@ -284,16 +277,6 @@ pub fn save_vocabulary(terms: Vec<crate::vocabulary::VocabularyTerm>) -> Result<
     })
 }
 
-/// Legacy helper: canonical strings only (enabled terms).
-pub fn load_custom_words() -> Vec<String> {
-    crate::vocabulary::canonical_list(&load_vocabulary())
-}
-
-/// Legacy helper: replace vocabulary with simple words (other fields defaulted).
-pub fn save_custom_words(words: Vec<String>) -> Result<(), String> {
-    save_vocabulary(crate::vocabulary::migrate_from_strings(&words))
-}
-
 /// Persists the system-prompt selection, preserving any other settings.
 pub fn save_system_prompt(prompt: String) -> Result<(), String> {
     update(|s| {
@@ -306,44 +289,9 @@ pub fn load_engine() -> Option<crate::models::TranscriptionEngine> {
     read().engine
 }
 
-/// Persists the engine selection, preserving any other settings.
-pub fn save_engine(engine: Option<crate::models::TranscriptionEngine>) -> Result<(), String> {
-    update(|s| {
-        s.engine = engine;
-    })
-}
-
 /// Returns the persisted sanitizer selection.
 pub fn load_sanitizer() -> Option<crate::models::SanitizerModel> {
     read().sanitizer
-}
-
-/// Persists the sanitizer selection, preserving any other settings.
-pub fn save_sanitizer(sanitizer: Option<crate::models::SanitizerModel>) -> Result<(), String> {
-    update(|s| {
-        s.sanitizer = sanitizer;
-    })
-}
-
-/// Returns the persisted gadget window position if saved.
-///
-/// Kept for backwards-compat only — new code should prefer
-/// [`load_gadget_physical_position`], which is scale-independent and
-/// works correctly across multi-monitor setups with mixed DPI.
-pub fn load_gadget_position() -> Option<(f64, f64)> {
-    let s = read();
-    match (s.gadget_x, s.gadget_y) {
-        (Some(x), Some(y)) => Some((x, y)),
-        _ => None,
-    }
-}
-
-/// Persists the gadget window position, preserving any other settings.
-pub fn save_gadget_position(x: f64, y: f64) -> Result<(), String> {
-    update(|s| {
-        s.gadget_x = Some(x);
-        s.gadget_y = Some(y);
-    })
 }
 
 /// Returns the persisted gadget window position in **physical** pixels
@@ -358,25 +306,9 @@ pub fn load_gadget_physical_position() -> Option<(i32, i32)> {
     }
 }
 
-/// Persists the gadget window position in physical pixels, preserving
-/// any other settings.
-pub fn save_gadget_physical_position(x: i32, y: i32) -> Result<(), String> {
-    update(|s| {
-        s.gadget_physical_x = Some(x);
-        s.gadget_physical_y = Some(y);
-    })
-}
-
 /// Returns the persisted dual-engine preference.
 pub fn load_dual_engine() -> bool {
     read().dual_engine
-}
-
-/// Persists the dual-engine preference, preserving any other settings.
-pub fn save_dual_engine(value: bool) -> Result<(), String> {
-    update(|s| {
-        s.dual_engine = value;
-    })
 }
 
 /// Returns the persisted Deepgram transport mode (defaults to batch).
@@ -384,23 +316,9 @@ pub fn load_deepgram_mode() -> crate::models::DeepgramMode {
     read().deepgram_mode
 }
 
-/// Persists the Deepgram transport mode, preserving any other settings.
-pub fn save_deepgram_mode(mode: crate::models::DeepgramMode) -> Result<(), String> {
-    update(|s| {
-        s.deepgram_mode = mode;
-    })
-}
-
 /// Returns the persisted reasoning-enabled preference.
 pub fn load_reasoning_enabled() -> bool {
     read().reasoning_enabled
-}
-
-/// Persists the reasoning-enabled preference.
-pub fn save_reasoning_enabled(value: bool) -> Result<(), String> {
-    update(|s| {
-        s.reasoning_enabled = value;
-    })
 }
 
 /// Returns the persisted sanitizer-enabled flag (defaults to `true`).
@@ -423,13 +341,6 @@ pub fn load_reasoning_effort() -> String {
     } else {
         s.reasoning_effort
     }
-}
-
-/// Persists the reasoning effort.
-pub fn save_reasoning_effort(effort: String) -> Result<(), String> {
-    update(|s| {
-        s.reasoning_effort = effort;
-    })
 }
 
 /// Persists the full engine configuration in a single read-modify-write cycle.
@@ -470,12 +381,6 @@ pub fn load_modes_enabled() -> bool {
     true
 }
 
-pub fn save_modes_enabled(_value: bool) -> Result<(), String> {
-    update(|s| {
-        s.modes_enabled = true;
-    })
-}
-
 /// Loads the product transcription mode. If unset, derives from legacy engine/dual
 /// without overwriting the user's engine preferences.
 pub fn load_transcription_mode() -> crate::pipeline_contract::TranscriptionMode {
@@ -489,22 +394,8 @@ pub fn load_transcription_mode() -> crate::pipeline_contract::TranscriptionMode 
     )
 }
 
-pub fn save_transcription_mode(
-    mode: crate::pipeline_contract::TranscriptionMode,
-) -> Result<(), String> {
-    update(|s| {
-        s.transcription_mode = Some(mode);
-    })
-}
-
 pub fn load_gemini_fallback_to_whisper() -> bool {
     read().gemini_fallback_to_whisper
-}
-
-pub fn save_gemini_fallback_to_whisper(value: bool) -> Result<(), String> {
-    update(|s| {
-        s.gemini_fallback_to_whisper = value;
-    })
 }
 
 /// Atomic save of mode preferences.
@@ -594,33 +485,12 @@ pub fn load_output_profiles() -> Vec<crate::output_policy::OutputProfile> {
     }
 }
 
-pub fn save_output_profiles(value: Vec<crate::output_policy::OutputProfile>) -> Result<(), String> {
-    update(|settings| {
-        settings.output_profiles = value;
-        settings.output_profiles_initialized = true;
-    })
-}
-
 pub fn load_formatting_level() -> crate::output_policy::FormattingLevel {
     read().formatting_level
 }
 
-pub fn save_formatting_level(value: crate::output_policy::FormattingLevel) -> Result<(), String> {
-    update(|settings| {
-        settings.formatting_level = value;
-    })
-}
-
 pub fn load_dictation_destination() -> crate::output_policy::DictationDestination {
     read().dictation_destination
-}
-
-pub fn save_dictation_destination(
-    value: crate::output_policy::DictationDestination,
-) -> Result<(), String> {
-    update(|settings| {
-        settings.dictation_destination = value;
-    })
 }
 
 pub fn save_output_policy(config: &crate::commands::OutputPolicyConfig) -> Result<(), String> {

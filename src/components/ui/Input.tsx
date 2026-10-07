@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes } from "react";
 
 const base =
   "w-full rounded-[10px] border border-line bg-white px-3.5 text-[13px] text-ink placeholder:text-[#5d5e58] " +
@@ -8,23 +8,3 @@ const base =
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} autoComplete={props.autoComplete ?? "off"} className={base + " h-10 " + (props.className ?? "")} />;
 }
-
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={base + " h-10 cursor-pointer pr-9 " + (props.className ?? "")}
-    />
-  );
-}
-
-export function Textarea(props: TextareaAttributes) {
-  return (
-    <textarea
-      {...props}
-      className={base + " min-h-28 resize-y py-3 leading-6 " + (props.className ?? "")}
-    />
-  );
-}
-
-type TextareaAttributes = TextareaHTMLAttributes<HTMLTextAreaElement>;

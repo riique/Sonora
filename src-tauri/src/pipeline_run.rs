@@ -45,14 +45,6 @@ impl TranscriptVersions {
             .unwrap_or("")
     }
 
-    pub fn delivery_candidate(&self) -> &str {
-        self.formatted
-            .as_deref()
-            .or(self.refined.as_deref())
-            .or(self.raw.as_deref())
-            .unwrap_or("")
-    }
-
     pub fn set_raw_once(&mut self, value: impl Into<String>) {
         if self.raw.is_none() {
             self.raw = Some(value.into());

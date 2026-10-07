@@ -149,39 +149,6 @@ fn other_type_name(v: &serde_json::Value) -> &'static str {
     }
 }
 
-/// Append content-type guidance to the sanitizer system prompt.
-pub fn content_type_instruction(ct: crate::pipeline_contract::ContentType) -> &'static str {
-    use crate::pipeline_contract::ContentType;
-    match ct {
-        ContentType::Programming => {
-            "\n\n--- TIPO DE CONTEÚDO: PROGRAMAÇÃO ---\n\
-* Preserve com máxima atenção código, comandos, flags, argumentos, nomes de funções, classes, variáveis, APIs, bibliotecas, arquivos, extensões, caminhos, URLs, versões e identificadores.\n\
-* Não traduza nomes técnicos, APIs, comandos ou termos em inglês.\n\
-* Não transforme código, comandos ou identificadores em prosa.\n\
-* Não corrija código ou comandos para fazê-los funcionar; transcreva o que foi falado.\n\
-* Use crases de Markdown para envolver literais técnicos curtos quando eles estiverem claramente identificados, como comandos, caminhos, nomes de arquivos, trechos de código e identificadores.\n\
-* Exemplo: “Execute npm run build e faça deploy” → “Execute `npm run build` e faça deploy.”\n\
-* Exemplo: “Abra o arquivo package ponto json” → “Abra o arquivo `package.json`.”\n\
-* Exemplo: “Use a variável user underscore id” → “Use a variável `user_id`.”\n\
-* Use blocos de código com três crases somente quando o falante ditar claramente um trecho de código estruturado ou solicitar explicitamente um bloco de código.\n\
-* Não invente crases, barras, pontos, hífens, underscores, capitalização ou outros caracteres quando eles não forem determinados pelo áudio, pelo glossário ou pelo contexto sem ambiguidade.\n\
-* Preserve Markdown técnico quando ele for explicitamente ditado. Quando a formatação estiver incerta, prefira texto simples."
-        }
-        ContentType::Study => {
-            "\n\n--- TIPO DE CONTEÚDO: ESTUDO ---\n\
-* Preserve terminologia acadêmica, científica e técnica, bem como nomes próprios, conceitos, definições, fórmulas, símbolos, unidades, grandezas e nomenclaturas.\n\
-* Preserve a estrutura explicativa e a ordem do raciocínio do falante.\n\
-* Não resuma, simplifique, formalize ou reorganize a explicação.\n\
-* Não corrija erros conceituais, científicos, matemáticos ou factuais do falante.\n\
-* Corrija apenas erros claros de grafia, capitalização, pontuação ou reconhecimento acústico, quando a forma correta estiver suficientemente sustentada pelo áudio ou pelo glossário.\n\
-* Preserve números, índices, expoentes, letras gregas, equações e notações quando forem identificáveis sem ambiguidade.\n\
-* Não transforme automaticamente palavras em símbolos ou fórmulas apenas porque isso seria convencional no assunto.\n\
-* Quando houver dúvida entre a forma falada e uma notação mais formal, preserve a forma falada."
-        }
-        ContentType::Auto => "",
-    }
-}
-
 /// Result of content-type detection with scores (for tests / debug).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContentTypeScores {
@@ -189,19 +156,6 @@ pub struct ContentTypeScores {
     pub study: f32,
     pub general: f32,
     pub resolved: crate::pipeline_contract::ContentType,
-}
-
-/// Resolves user preference: Auto → detect from text; otherwise keep fixed type.
-pub fn resolve_content_type(
-    preference: crate::pipeline_contract::ContentType,
-    text: &str,
-) -> crate::pipeline_contract::ContentType {
-    use crate::pipeline_contract::ContentType;
-    if preference == ContentType::Auto {
-        detect_content_type(text)
-    } else {
-        preference
-    }
 }
 
 /// Transparent multi-signal heuristic for Auto content type.
