@@ -6,6 +6,7 @@ import { HistoricoView } from "./views/HistoricoView";
 import { ConfiguracoesView } from "./views/ConfiguracoesView";
 import { InsightsView } from "./views/InsightsView";
 import { useOnAir } from "./recording/useOnAir";
+import { Notices } from "./components/Notices";
 import type { Navigate, SettingsTab, ViewKey } from "./views";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
           </div>
         </div>
       </main>
+      <Notices />
     </div>
   );
 }

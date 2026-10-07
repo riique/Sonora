@@ -1,0 +1,4 @@
+[env]
+# whisper.cpp (offline fallback) would otherwise be tuned to the build machine's
+# CPU, and the installer could crash with "illegal instruction" on older PCs.
+GGML_NATIVE = "OFF"

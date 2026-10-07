@@ -466,6 +466,34 @@ pub struct Page {
     pub total: usize,
     pub next_offset: Option<usize>,
     pub total_words: usize,
+    /// Reported/estimated provider cost of this calendar month's dictations.
+    pub month_cost_usd: Option<f64>,
+    pub month_dictations: usize,
+}
+
+/// Sum of the costs of every pipeline run (retries are billed too).
+pub fn entry_cost_usd(entry: &HistoryEntry) -> Option<f64> {
+    let costs = entry
+        .pipeline_runs
+        .iter()
+        .filter_map(|run| run.usage.cost.amount_usd)
+        .collect::<Vec<_>>();
+    (!costs.is_empty()).then(|| costs.iter().sum())
+}
+
+fn month_totals<'a>(
+    entries: impl Iterator<Item = &'a HistoryEntry>,
+    month: &str,
+) -> (Option<f64>, usize) {
+    let mut cost = None;
+    let mut count = 0;
+    for entry in entries.filter(|entry| entry.date.starts_with(month)) {
+        count += 1;
+        if let Some(amount) = entry_cost_usd(entry) {
+            cost = Some(cost.unwrap_or(0.0) + amount);
+        }
+    }
+    (cost, count)
 }
 fn project(mut entry: HistoryEntry) -> HistoryEntry {
     entry.debug_info = None;
@@ -517,9 +545,21 @@ fn project_page(store: &Store, query: &str, offset: usize, limit: usize, deleted
         .take(limit)
         .map(|entry| project((*entry).clone()))
         .collect();
+    let today = crate::audio::now_timestamp();
+    let month = today.get(..7).unwrap_or_default();
+    let (month_cost_usd, month_dictations) = if deleted {
+        (None, 0)
+    } else {
+        month_totals(
+            store.order.iter().filter_map(|id| store.entries.get(id)),
+            month,
+        )
+    };
     Page {
         items,
         total,
+        month_cost_usd,
+        month_dictations,
         total_words: entries.iter().map(|entry| entry.words).sum(),
         next_offset: (offset.saturating_add(limit) < total).then_some(offset.saturating_add(limit)),
     }
@@ -603,6 +643,33 @@ pub fn export_entries() -> Result<(Vec<HistoryEntry>, Vec<String>), String> {
         );
         (entries, deleted)
     })
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::*;
+
+    #[test]
+    fn month_totals_sum_runs_of_matching_month_only() {
+        let entry_at = |date: &str| -> HistoryEntry {
+            serde_json::from_value(serde_json::json!({
+                "id": date,
+                "date": date,
+                "words": 1,
+                "engine": "GroqWhisper",
+                "text": "oi"
+            }))
+            .unwrap()
+        };
+        let mut entry = entry_at("2026-10-07 10:00");
+        let mut run = PipelineRun::default();
+        run.usage.cost.amount_usd = Some(0.002);
+        entry.pipeline_runs = vec![run.clone(), run];
+        let old = entry_at("2026-09-30 10:00");
+        let (cost, count) = month_totals([&entry, &old].into_iter(), "2026-10");
+        assert_eq!(count, 1);
+        assert!((cost.unwrap() - 0.004).abs() < 1e-12);
+    }
 }
 
 #[cfg(test)]

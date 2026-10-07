@@ -1,14 +1,25 @@
 import { useEffect, useState } from "react";
 import { Button } from "../components/ui/Button";
 import { KbdCombo, shortcutKeys } from "../components/ui/Kbd";
-import { ErrorState, PreferenceRow, RowGroup } from "../components/ui/Surface";
+import { ErrorState, PreferenceRow, RowGroup, Segmented } from "../components/ui/Surface";
 import { getShortcuts, setShortcuts, type ShortcutConfig } from "../lib/tauri";
 
-type BindId = "toggle" | "cancel";
+type BindId = "toggle" | "cancel" | "command";
+type RecordStyle = "toggle" | "hold";
 
-const BIND_META = [
-  { id: "toggle" as const, title: "Iniciar e encerrar ditado", description: "Começa a gravar ou encerra a gravação ativa, em qualquer aplicativo." },
-  { id: "cancel" as const, title: "Cancelar ditado", description: "Descarta a gravação em andamento sem salvar." },
+const BIND_META: { id: BindId; title: string; description: (hold: boolean) => string }[] = [
+  {
+    id: "toggle",
+    title: "Ditar",
+    description: (hold) => hold ? "Segure enquanto fala; ao soltar, o texto é colado." : "Aperte para começar e de novo para colar o texto.",
+  },
+  {
+    id: "command",
+    title: "Comando de voz",
+    description: (hold) =>
+      `Selecione um texto, ${hold ? "segure" : "aperte"} e diga o que fazer: “deixa mais formal”, “traduz para inglês”. Sem seleção, escreve o que você pedir.`,
+  },
+  { id: "cancel", title: "Cancelar", description: () => "Descarta a gravação em andamento sem colar nada." },
 ];
 
 function eventToShortcut(event: React.KeyboardEvent): string | null {
@@ -30,7 +41,7 @@ function eventToShortcut(event: React.KeyboardEvent): string | null {
 
 /** Global shortcut capture rows, shown in Ajustes › Geral. */
 export function ShortcutSettings() {
-  const [config, setConfig] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q" });
+  const [config, setConfig] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q", command: "Control+Shift+B", hold_to_talk: false });
   const [capturing, setCapturing] = useState<BindId | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,11 +61,14 @@ export function ShortcutSettings() {
       setError("Use ao menos um modificador com a tecla, ou uma tecla de função.");
       return;
     }
-    const next = bind === "toggle" ? { toggle: combo, cancel: config.cancel } : { toggle: config.toggle, cancel: combo };
+    await save({ ...config, [bind]: combo });
+  };
+
+  const save = async (next: ShortcutConfig) => {
     setSaving(true);
     setError("");
     try {
-      setConfig(await setShortcuts(next.toggle, next.cancel));
+      setConfig(await setShortcuts(next));
       setCapturing(null);
     } catch (saveError) {
       setError(typeof saveError === "string" ? saveError : String(saveError));
@@ -67,10 +81,19 @@ export function ShortcutSettings() {
     <div>
       {error && <ErrorState>{error}</ErrorState>}
       <RowGroup>
+        <PreferenceRow title="Modo de gravação" description="Vale para ditar e para o comando de voz.">
+          <Segmented<RecordStyle>
+            label="Modo de gravação"
+            value={config.hold_to_talk ? "hold" : "toggle"}
+            onChange={(style) => void save({ ...config, hold_to_talk: style === "hold" })}
+            options={[{ value: "toggle", label: "Apertar" }, { value: "hold", label: "Segurar" }]}
+          />
+        </PreferenceRow>
         {BIND_META.map((binding) => {
           const isCapturing = capturing === binding.id;
+          const combo = config[binding.id];
           return (
-            <PreferenceRow key={binding.id} title={binding.title} description={binding.description}>
+            <PreferenceRow key={binding.id} title={binding.title} description={binding.description(config.hold_to_talk)}>
               {isCapturing ? (
                 <input
                   autoFocus
@@ -81,7 +104,7 @@ export function ShortcutSettings() {
                   value="Pressione as teclas…"
                   className="h-8 w-44 rounded-[8px] border border-ink bg-raised px-3 text-center text-[12px] text-ink outline-hidden"
                 />
-              ) : (
+              ) : combo ? (
                 <button
                   type="button"
                   disabled={saving}
@@ -89,11 +112,20 @@ export function ShortcutSettings() {
                   className="group flex items-center gap-3 rounded-[8px] px-1 py-1 transition-colors"
                   aria-label={`Alterar atalho: ${binding.title}`}
                 >
-                  <KbdCombo keys={shortcutKeys(config[binding.id])} />
+                  <KbdCombo keys={shortcutKeys(combo)} />
                   <span className="text-[12.5px] text-muted group-hover:text-ink">Alterar</span>
                 </button>
+              ) : (
+                <Button size="sm" disabled={saving} onClick={() => { setError(""); setCapturing(binding.id); }}>
+                  Definir atalho
+                </Button>
               )}
               {isCapturing && <Button size="sm" variant="ghost" onMouseDown={(event) => event.preventDefault()} onClick={() => setCapturing(null)}>Cancelar</Button>}
+              {!isCapturing && binding.id === "command" && combo && (
+                <Button size="sm" variant="ghost" disabled={saving} onClick={() => void save({ ...config, command: "" })}>
+                  Desativar
+                </Button>
+              )}
             </PreferenceRow>
           );
         })}

@@ -201,6 +201,12 @@
           "markdownDescription": "Enables the cancel_recording command without any pre-configured scope."
         },
         {
+          "description": "Enables the check_for_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-check-for-update",
+          "markdownDescription": "Enables the check_for_update command without any pre-configured scope."
+        },
+        {
           "description": "Enables the clear_history command without any pre-configured scope.",
           "type": "string",
           "const": "allow-clear-history",
@@ -217,6 +223,12 @@
           "type": "string",
           "const": "allow-delete-scratchpad-note",
           "markdownDescription": "Enables the delete_scratchpad_note command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_local_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-download-local-model",
+          "markdownDescription": "Enables the download_local_model command without any pre-configured scope."
         },
         {
           "description": "Enables the evaluate_pronunciation command without any pre-configured scope.",
@@ -255,22 +267,10 @@
           "markdownDescription": "Enables the get_autostart command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_compact_mode command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-compact-mode",
-          "markdownDescription": "Enables the get_compact_mode command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_context_preferences command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-context-preferences",
           "markdownDescription": "Enables the get_context_preferences command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_custom_words command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-custom-words",
-          "markdownDescription": "Enables the get_custom_words command without any pre-configured scope."
         },
         {
           "description": "Enables the get_dev_mode command without any pre-configured scope.",
@@ -285,10 +285,10 @@
           "markdownDescription": "Enables the get_engine_config command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_history command without any pre-configured scope.",
+          "description": "Enables the get_feature_settings command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-history",
-          "markdownDescription": "Enables the get_history command without any pre-configured scope."
+          "const": "allow-get-feature-settings",
+          "markdownDescription": "Enables the get_feature_settings command without any pre-configured scope."
         },
         {
           "description": "Enables the get_history_detail command without any pre-configured scope.",
@@ -315,16 +315,16 @@
           "markdownDescription": "Enables the get_insights command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_insights_backfill_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-insights-backfill-status",
-          "markdownDescription": "Enables the get_insights_backfill_status command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_local_diagnostics command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-local-diagnostics",
           "markdownDescription": "Enables the get_local_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_local_model_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-local-model-status",
+          "markdownDescription": "Enables the get_local_model_status command without any pre-configured scope."
         },
         {
           "description": "Enables the get_mode_config command without any pre-configured scope.",
@@ -343,12 +343,6 @@
           "type": "string",
           "const": "allow-get-recording-elapsed",
           "markdownDescription": "Enables the get_recording_elapsed command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_recording_state command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-recording-state",
-          "markdownDescription": "Enables the get_recording_state command without any pre-configured scope."
         },
         {
           "description": "Enables the get_recording_status command without any pre-configured scope.",
@@ -381,12 +375,6 @@
           "markdownDescription": "Enables the get_snippets command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_system_prompt command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-system-prompt",
-          "markdownDescription": "Enables the get_system_prompt command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_vocabulary command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-vocabulary",
@@ -411,6 +399,12 @@
           "markdownDescription": "Enables the import_local_data command without any pre-configured scope."
         },
         {
+          "description": "Enables the install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-update",
+          "markdownDescription": "Enables the install_update command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list_audio_devices command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-audio-devices",
@@ -421,6 +415,12 @@
           "type": "string",
           "const": "allow-read-history-audio",
           "markdownDescription": "Enables the read_history_audio command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_local_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-local-model",
+          "markdownDescription": "Enables the remove_local_model command without any pre-configured scope."
         },
         {
           "description": "Enables the repair_history_journal command without any pre-configured scope.",
@@ -471,12 +471,6 @@
           "markdownDescription": "Enables the save_api_keys command without any pre-configured scope."
         },
         {
-          "description": "Enables the save_system_prompt command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-save-system-prompt",
-          "markdownDescription": "Enables the save_system_prompt command without any pre-configured scope."
-        },
-        {
           "description": "Enables the set_ai_voice_profile_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-ai-voice-profile-enabled",
@@ -495,22 +489,10 @@
           "markdownDescription": "Enables the set_autostart command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_compact_mode command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-compact-mode",
-          "markdownDescription": "Enables the set_compact_mode command without any pre-configured scope."
-        },
-        {
           "description": "Enables the set_context_preferences command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-context-preferences",
           "markdownDescription": "Enables the set_context_preferences command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the set_custom_words command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-custom-words",
-          "markdownDescription": "Enables the set_custom_words command without any pre-configured scope."
         },
         {
           "description": "Enables the set_dev_mode command without any pre-configured scope.",
@@ -519,10 +501,10 @@
           "markdownDescription": "Enables the set_dev_mode command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_gadget_hit_rect command without any pre-configured scope.",
+          "description": "Enables the set_feature_settings command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-set-gadget-hit-rect",
-          "markdownDescription": "Enables the set_gadget_hit_rect command without any pre-configured scope."
+          "const": "allow-set-feature-settings",
+          "markdownDescription": "Enables the set_feature_settings command without any pre-configured scope."
         },
         {
           "description": "Enables the set_gadget_visual_state command without any pre-configured scope.",
@@ -651,6 +633,12 @@
           "markdownDescription": "Denies the cancel_recording command without any pre-configured scope."
         },
         {
+          "description": "Denies the check_for_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-check-for-update",
+          "markdownDescription": "Denies the check_for_update command without any pre-configured scope."
+        },
+        {
           "description": "Denies the clear_history command without any pre-configured scope.",
           "type": "string",
           "const": "deny-clear-history",
@@ -667,6 +655,12 @@
           "type": "string",
           "const": "deny-delete-scratchpad-note",
           "markdownDescription": "Denies the delete_scratchpad_note command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_local_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-download-local-model",
+          "markdownDescription": "Denies the download_local_model command without any pre-configured scope."
         },
         {
           "description": "Denies the evaluate_pronunciation command without any pre-configured scope.",
@@ -705,22 +699,10 @@
           "markdownDescription": "Denies the get_autostart command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_compact_mode command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-compact-mode",
-          "markdownDescription": "Denies the get_compact_mode command without any pre-configured scope."
-        },
-        {
           "description": "Denies the get_context_preferences command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-context-preferences",
           "markdownDescription": "Denies the get_context_preferences command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_custom_words command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-custom-words",
-          "markdownDescription": "Denies the get_custom_words command without any pre-configured scope."
         },
         {
           "description": "Denies the get_dev_mode command without any pre-configured scope.",
@@ -735,10 +717,10 @@
           "markdownDescription": "Denies the get_engine_config command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_history command without any pre-configured scope.",
+          "description": "Denies the get_feature_settings command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-history",
-          "markdownDescription": "Denies the get_history command without any pre-configured scope."
+          "const": "deny-get-feature-settings",
+          "markdownDescription": "Denies the get_feature_settings command without any pre-configured scope."
         },
         {
           "description": "Denies the get_history_detail command without any pre-configured scope.",
@@ -765,16 +747,16 @@
           "markdownDescription": "Denies the get_insights command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_insights_backfill_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-insights-backfill-status",
-          "markdownDescription": "Denies the get_insights_backfill_status command without any pre-configured scope."
-        },
-        {
           "description": "Denies the get_local_diagnostics command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-local-diagnostics",
           "markdownDescription": "Denies the get_local_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_local_model_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-local-model-status",
+          "markdownDescription": "Denies the get_local_model_status command without any pre-configured scope."
         },
         {
           "description": "Denies the get_mode_config command without any pre-configured scope.",
@@ -793,12 +775,6 @@
           "type": "string",
           "const": "deny-get-recording-elapsed",
           "markdownDescription": "Denies the get_recording_elapsed command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_recording_state command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-recording-state",
-          "markdownDescription": "Denies the get_recording_state command without any pre-configured scope."
         },
         {
           "description": "Denies the get_recording_status command without any pre-configured scope.",
@@ -831,12 +807,6 @@
           "markdownDescription": "Denies the get_snippets command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_system_prompt command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-system-prompt",
-          "markdownDescription": "Denies the get_system_prompt command without any pre-configured scope."
-        },
-        {
           "description": "Denies the get_vocabulary command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-vocabulary",
@@ -861,6 +831,12 @@
           "markdownDescription": "Denies the import_local_data command without any pre-configured scope."
         },
         {
+          "description": "Denies the install_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-update",
+          "markdownDescription": "Denies the install_update command without any pre-configured scope."
+        },
+        {
           "description": "Denies the list_audio_devices command without any pre-configured scope.",
           "type": "string",
           "const": "deny-list-audio-devices",
@@ -871,6 +847,12 @@
           "type": "string",
           "const": "deny-read-history-audio",
           "markdownDescription": "Denies the read_history_audio command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_local_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-local-model",
+          "markdownDescription": "Denies the remove_local_model command without any pre-configured scope."
         },
         {
           "description": "Denies the repair_history_journal command without any pre-configured scope.",
@@ -921,12 +903,6 @@
           "markdownDescription": "Denies the save_api_keys command without any pre-configured scope."
         },
         {
-          "description": "Denies the save_system_prompt command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-save-system-prompt",
-          "markdownDescription": "Denies the save_system_prompt command without any pre-configured scope."
-        },
-        {
           "description": "Denies the set_ai_voice_profile_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "deny-set-ai-voice-profile-enabled",
@@ -945,22 +921,10 @@
           "markdownDescription": "Denies the set_autostart command without any pre-configured scope."
         },
         {
-          "description": "Denies the set_compact_mode command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-compact-mode",
-          "markdownDescription": "Denies the set_compact_mode command without any pre-configured scope."
-        },
-        {
           "description": "Denies the set_context_preferences command without any pre-configured scope.",
           "type": "string",
           "const": "deny-set-context-preferences",
           "markdownDescription": "Denies the set_context_preferences command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_custom_words command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-custom-words",
-          "markdownDescription": "Denies the set_custom_words command without any pre-configured scope."
         },
         {
           "description": "Denies the set_dev_mode command without any pre-configured scope.",
@@ -969,10 +933,10 @@
           "markdownDescription": "Denies the set_dev_mode command without any pre-configured scope."
         },
         {
-          "description": "Denies the set_gadget_hit_rect command without any pre-configured scope.",
+          "description": "Denies the set_feature_settings command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-set-gadget-hit-rect",
-          "markdownDescription": "Denies the set_gadget_hit_rect command without any pre-configured scope."
+          "const": "deny-set-feature-settings",
+          "markdownDescription": "Denies the set_feature_settings command without any pre-configured scope."
         },
         {
           "description": "Denies the set_gadget_visual_state command without any pre-configured scope.",
@@ -3223,6 +3187,60 @@
           "type": "string",
           "const": "global-shortcut:deny-unregister-all",
           "markdownDescription": "Denies the unregister_all command without any pre-configured scope."
+        },
+        {
+          "description": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`",
+          "type": "string",
+          "const": "updater:default",
+          "markdownDescription": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`"
+        },
+        {
+          "description": "Enables the check command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-check",
+          "markdownDescription": "Enables the check command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-download",
+          "markdownDescription": "Enables the download command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-download-and-install",
+          "markdownDescription": "Enables the download_and_install command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:allow-install",
+          "markdownDescription": "Enables the install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-check",
+          "markdownDescription": "Denies the check command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-download",
+          "markdownDescription": "Denies the download command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the download_and_install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-download-and-install",
+          "markdownDescription": "Denies the download_and_install command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install command without any pre-configured scope.",
+          "type": "string",
+          "const": "updater:deny-install",
+          "markdownDescription": "Denies the install command without any pre-configured scope."
         }
       ]
     },

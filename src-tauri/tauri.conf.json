@@ -30,7 +30,17 @@
       "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
     }
   },
-  "plugins": {},
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY5Qjc2QTA4ODlCMEQzRkEKUldUNjA3Q0pDR3EzK1E3a0tiUEpqaFd1bFFSUmtORkIzR3dIR3I4RmJLMWt0ekE1N3l5OUZqOGMK",
+      "endpoints": [
+        "https://github.com/riique/Sonora/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "publisher": "Sonora",
@@ -41,6 +51,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   }
 }

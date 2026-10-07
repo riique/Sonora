@@ -83,7 +83,9 @@ impl Default for OutputProfile {
             name: "Padrão".into(),
             enabled: true,
             matcher: ProfileMatcher::default(),
-            formatting_level: Some(FormattingLevel::Smart),
+            // Inherit the global "Formatação" setting; a concrete value here would
+            // silently override it for every dictation.
+            formatting_level: None,
             content_type: None,
             style_instruction: None,
             allow_context_to_cloud: Some(false),
@@ -96,7 +98,6 @@ pub fn default_output_profiles() -> Vec<OutputProfile> {
         id: "codex".into(),
         name: "Codex · programação".into(),
         content_type: Some("programming".into()),
-        formatting_level: Some(FormattingLevel::Smart),
         style_instruction: Some(
             "Preserve código, paths, comandos e identificadores literalmente.".into(),
         ),
@@ -107,19 +108,31 @@ pub fn default_output_profiles() -> Vec<OutputProfile> {
     let mut chatgpt = OutputProfile {
         id: "chatgpt".into(),
         name: "ChatGPT · chat".into(),
-        formatting_level: Some(FormattingLevel::Smart),
         ..Default::default()
     };
     chatgpt.matcher.domains = vec!["chatgpt.com".into()];
     let mut gemini = OutputProfile {
         id: "gemini".into(),
         name: "Gemini · chat".into(),
-        formatting_level: Some(FormattingLevel::Smart),
         ..Default::default()
     };
     gemini.matcher.domains = vec!["gemini.google.com".into()];
     vec![OutputProfile::default(), codex, chatgpt, gemini]
 }
+
+/// Profiles saved before built-in styles inherited the global level carry an
+/// explicit `Smart` that made the global "Formatação" setting a no-op.
+pub fn migrate_builtin_formatting_levels(profiles: &mut [OutputProfile]) {
+    for profile in profiles {
+        if BUILTIN_PROFILE_IDS.contains(&profile.id.as_str())
+            && profile.formatting_level == Some(FormattingLevel::Smart)
+        {
+            profile.formatting_level = None;
+        }
+    }
+}
+
+const BUILTIN_PROFILE_IDS: [&str; 4] = ["default", "codex", "chatgpt", "gemini"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResolvedOutputProfile {
@@ -244,6 +257,36 @@ mod tests {
             formatting_level: Some(level),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn global_level_applies_to_builtin_profiles() {
+        let mut profiles = default_output_profiles();
+        let context = ContextSnapshot {
+            domain: Some("chatgpt.com".into()),
+            ..Default::default()
+        };
+        for global in [FormattingLevel::Literal, FormattingLevel::Aggressive] {
+            assert_eq!(
+                resolve_output_profile(&profiles, &ContextSnapshot::default(), None, global)
+                    .formatting_level,
+                global
+            );
+            assert_eq!(
+                resolve_output_profile(&profiles, &context, None, global).formatting_level,
+                global
+            );
+        }
+        // Legacy persisted built-ins with an explicit Smart are migrated to inherit.
+        for profile in &mut profiles {
+            profile.formatting_level = Some(FormattingLevel::Smart);
+        }
+        migrate_builtin_formatting_levels(&mut profiles);
+        assert_eq!(
+            resolve_output_profile(&profiles, &context, None, FormattingLevel::Literal)
+                .formatting_level,
+            FormattingLevel::Literal
+        );
     }
 
     #[test]

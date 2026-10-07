@@ -220,7 +220,6 @@ pub struct SanitizerOutcome {
 /// the result and a [`crate::models::SanitizerDebug`] capture of the request.
 pub struct CallSanitizerApiInput<'a> {
     pub whisper_text: &'a str,
-    pub deepgram_text: &'a str,
     pub model: &'a str,
     pub system_prompt: &'a str,
     pub untrusted_context: Option<&'a str>,
@@ -234,7 +233,6 @@ pub struct CallSanitizerApiInput<'a> {
 pub async fn call_sanitizer_api(input: CallSanitizerApiInput<'_>) -> SanitizerOutcome {
     let CallSanitizerApiInput {
         whisper_text,
-        deepgram_text,
         model,
         system_prompt,
         untrusted_context,
@@ -263,10 +261,7 @@ na dúvida, mantenha o original e NÃO force termos onde não pertencem.\n{}",
         ));
     }
 
-    let mut user_message_content = format!(
-        "[WHISPER_RAW]: {}\n[DEEPGRAM_RAW]: {}",
-        whisper_text, deepgram_text
-    );
+    let mut user_message_content = format!("[WHISPER_RAW]: {}", whisper_text);
     if let Some(context) = untrusted_context.filter(|value| !value.trim().is_empty()) {
         user_message_content.push_str("\n\n");
         user_message_content.push_str(context);

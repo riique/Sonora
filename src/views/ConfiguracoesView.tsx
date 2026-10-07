@@ -24,7 +24,7 @@ import {
   updateModeConfig,
   getApiKeys,
   saveApiKeys,
-  type DeepgramMode,
+  type EngineConfigSnapshot,
   type SanitizerModel,
   type TranscriptionMode,
   type GeminiModel,
@@ -42,6 +42,9 @@ import { Input, Select } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
 import { EmptyState, ErrorState, PageHeader, PreferenceRow, RowGroup, Section, Segmented } from "../components/ui/Surface";
 import { IntelligenceSettings } from "./IntelligenceSettings";
+import { OfflineSection } from "./OfflineSection";
+import { UpdatesSection } from "./UpdatesSection";
+import { useFeatures } from "../lib/useFeatures";
 import { ShortcutSettings } from "./AtalhosView";
 import { RecoveryView } from "./RecoveryView";
 import type { SettingsTab } from "./index";
@@ -251,6 +254,8 @@ function GeralTab() {
         </RowGroup>
       </Section>
 
+      <UpdatesSection />
+
       <Section title="Pasta dos áudios" description="Onde as próximas gravações são salvas. Áudios existentes continuam onde estão e acessíveis pelo Histórico.">
         <div className="border-y border-line py-4">
           <p className="truncate font-mono text-[12px] text-strong" title={audioDirectory}>{audioDirectory || "Carregando…"}</p>
@@ -325,11 +330,8 @@ function TranscricaoTab() {
   const [geminiFallback, setGeminiFallback] = useState(true);
   const [sanitizer, setSanitizer] = useState<SanitizerModel>("llama-70b");
   const [sanitizerEnabled, setSanitizerEnabledState] = useState(true);
-  const [engine, setEngine] = useState("groq-whisper");
-  const [dual, setDual] = useState(false);
-  const [deepgramMode, setDeepgramMode] = useState<DeepgramMode>("batch");
-  const [reasoning, setReasoning] = useState(false);
-  const [effort, setEffort] = useState("medium");
+  const [engineConfig, setEngineConfig] = useState<EngineConfigSnapshot | null>(null);
+  const { features, update: updateFeatures, error: featuresError } = useFeatures();
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [geminiPipelines, setGeminiPipelines] = useState<GeminiPipelineConfig>({
     ultra_fast_whisper: "large-v3-turbo",
@@ -361,12 +363,8 @@ function TranscricaoTab() {
       .catch(console.error);
     getEngineConfig()
       .then((c) => {
-        if (c.engine) setEngine(c.engine);
-        setDual(!!c.dual_engine);
+        setEngineConfig(c);
         if (c.sanitizer) setSanitizer(c.sanitizer as SanitizerModel);
-        setReasoning(!!c.reasoning_enabled);
-        if (c.reasoning_effort) setEffort(c.reasoning_effort);
-        if (c.deepgram_mode) setDeepgramMode(c.deepgram_mode);
       })
       .catch(console.error);
     getSanitizerEnabled().then(setSanitizerEnabledState).catch(console.error);
@@ -530,7 +528,19 @@ function TranscricaoTab() {
                   <option value="large-v3">whisper-large-v3</option>
                 </Select>
               </PreferenceRow>
+              <PreferenceRow
+                title="Refinar com IA"
+                description="Corrige pontuação e termos do vocabulário e aplica o estilo do aplicativo em uso. Acrescenta cerca de meio segundo. Desligado, o texto sai como o Whisper ouviu."
+              >
+                <Toggle
+                  label="Refinar com IA no Ultrarrápido"
+                  checked={features?.quick_refine ?? true}
+                  disabled={!features}
+                  onChange={(value) => void updateFeatures({ quick_refine: value })}
+                />
+              </PreferenceRow>
             </RowGroup>
+            {featuresError && <p className="mt-2 text-[12px] text-live" role="alert">{featuresError}</p>}
           </>
         )}
       </Section>
@@ -557,9 +567,11 @@ function TranscricaoTab() {
                       onChange={(e) => {
                         const id = e.target.value as SanitizerModel;
                         setSanitizer(id);
-                        invoke("update_engine_config", {
-                          payload: { engine, sanitizer: id, dual_engine: dual, reasoning_enabled: reasoning, reasoning_effort: effort, deepgram_mode: deepgramMode },
-                        }).catch(console.error);
+                        if (engineConfig) {
+                          invoke("update_engine_config", { payload: { ...engineConfig, sanitizer: id } })
+                            .then(() => setEngineConfig({ ...engineConfig, sanitizer: id }))
+                            .catch(console.error);
+                        }
                       }}
                     >
                       {SANITIZERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
@@ -571,6 +583,8 @@ function TranscricaoTab() {
           </RowGroup>
         </Section>
       )}
+
+      <OfflineSection features={features} onChange={updateFeatures} />
 
       <Section title="Para programação">
         <RowGroup>

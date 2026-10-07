@@ -457,48 +457,11 @@ pub fn cancel_recording(
     Ok(())
 }
 
-/// `get_recording_state`
-///
-/// Read-only accessor used by the frontend on startup or after a
-/// window refresh to sync the timer display with the backend truth.
-#[tauri::command]
-pub fn get_recording_state(state: State<'_, SharedState>) -> bool {
-    state.is_recording()
-}
-
 /// Versioned recording lifecycle snapshot used to reconcile event listeners
 /// without allowing an older async response to overwrite a newer transition.
 #[tauri::command]
 pub fn get_recording_status(state: State<'_, SharedState>) -> crate::models::RecordingStatus {
     state.recording_status()
-}
-
-/// `get_history`
-///
-/// Returns the full persisted transcription history, newest first. The
-/// list lives in `history.json` inside the app data directory and is
-/// kept in sync across invocations by the `history` module.
-#[tauri::command]
-pub async fn get_history() -> Result<Vec<crate::models::HistoryEntry>, CommandError> {
-    tokio::task::spawn_blocking(|| {
-        let developer_mode = crate::settings::load_dev_mode();
-        let mut entries = crate::history::try_load_all().map_err(CommandError::Internal)?;
-        if !developer_mode {
-            for entry in &mut entries {
-                entry.debug_info = None;
-                for run in &mut entry.pipeline_runs {
-                    run.debug_info = None;
-                    for attempt in &mut run.attempts {
-                        attempt.result.request_sanitized = None;
-                        attempt.result.response_sanitized = None;
-                    }
-                }
-            }
-        }
-        Ok::<_, CommandError>(entries)
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -668,11 +631,21 @@ pub async fn update_history_text(
             profile_id: run.profile_id.clone(),
         })
         .unwrap_or_default();
+    let prompts_enabled = state.features.read().learning_prompts;
+    let app_handle = state.app_handle.read().clone();
     let ok = tokio::task::spawn_blocking(move || {
         let updated = crate::history::update_text(&id, &text);
         if updated {
-            if let Err(error) = crate::learning::record(&before, &text, learning_context) {
-                log::warn!("learning: failed to record correction: {}", error);
+            match crate::learning::record(&before, &text, learning_context) {
+                Ok(Some(event)) if prompts_enabled && crate::learning::is_suggestion(&event) => {
+                    // Offer the correction right away instead of waiting for the
+                    // user to find it in Configurações.
+                    if let Some(app) = app_handle.as_ref() {
+                        let _ = tauri::Emitter::emit(app, "vocabulary-suggestion", &event);
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => log::warn!("learning: failed to record correction: {}", error),
             }
         }
         updated
@@ -758,11 +731,6 @@ pub async fn get_insights(
 }
 
 #[tauri::command]
-pub fn get_insights_backfill_status() -> crate::insights::BackfillStatus {
-    crate::insights::backfill_status()
-}
-
-#[tauri::command]
 pub fn set_insights_backfill_paused(paused: bool) -> crate::insights::BackfillStatus {
     crate::insights::set_backfill_paused(paused)
 }
@@ -829,27 +797,6 @@ pub async fn add_insight_correction_to_vocabulary(
     Ok(())
 }
 
-/// `save_system_prompt`
-///
-/// Stores the user-edited sanitizer system prompt in the in-memory
-/// application state and persists it to settings.json.
-#[tauri::command]
-pub async fn save_system_prompt(
-    state: State<'_, SharedState>,
-    prompt: String,
-) -> Result<(), CommandError> {
-    log::info!("save_system_prompt: {} chars", prompt.len());
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_system_prompt(prompt.clone()).map_err(CommandError::Internal)?;
-        *shared.system_prompt.write() = prompt;
-        Ok(())
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
 /// `get_shortcuts`
 ///
 /// Returns the currently active recording shortcuts so the Atalhos view can
@@ -871,55 +818,23 @@ pub async fn set_shortcuts(
     state: State<'_, SharedState>,
     toggle: String,
     cancel: String,
+    command: Option<String>,
+    hold_to_talk: Option<bool>,
 ) -> Result<crate::models::ShortcutConfig, CommandError> {
     log::info!("set_shortcuts: toggle={} cancel={}", toggle, cancel);
     let shared = state.inner().clone();
+    let current = shared.shortcuts.read().clone();
+    let requested = crate::models::ShortcutConfig {
+        toggle,
+        cancel,
+        command: command.unwrap_or(current.command),
+        hold_to_talk: hold_to_talk.unwrap_or(current.hold_to_talk),
+    };
     tokio::task::spawn_blocking(move || {
-        crate::shortcuts::apply_new(&app, &shared, toggle, cancel).map_err(CommandError::Internal)
+        crate::shortcuts::apply_new(&app, &shared, requested).map_err(CommandError::Internal)
     })
     .await
     .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
-/// `get_system_prompt`
-///
-/// Returns the currently stored sanitizer system prompt so the settings
-/// UI can populate the textarea on load.
-#[tauri::command]
-pub fn get_system_prompt(state: State<'_, SharedState>) -> String {
-    state.system_prompt.read().clone()
-}
-
-/// `get_custom_words` — legacy: enabled canonical spellings only.
-#[tauri::command]
-pub fn get_custom_words(state: State<'_, SharedState>) -> Vec<String> {
-    crate::vocabulary::canonical_list(&state.vocabulary.read())
-}
-
-/// `set_custom_words` — legacy: replaces vocabulary with simple words.
-#[tauri::command]
-pub async fn set_custom_words(
-    state: State<'_, SharedState>,
-    words: Vec<String>,
-) -> Result<Vec<String>, CommandError> {
-    let terms = crate::vocabulary::migrate_from_strings(&words);
-    let terms =
-        crate::vocabulary::normalize_and_validate(terms).map_err(CommandError::InvalidPayload)?;
-    let result = crate::vocabulary::canonical_list(&terms);
-    log::info!("set_custom_words: {} terms (legacy)", result.len());
-
-    let shared = state.inner().clone();
-    let terms_store = terms.clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_vocabulary(terms_store.clone()).map_err(CommandError::Internal)?;
-        *shared.vocabulary.write() = terms_store;
-        Ok::<(), CommandError>(())
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))??;
-
-    Ok(result)
 }
 
 /// Full structured vocabulary.
@@ -950,36 +865,6 @@ pub async fn set_vocabulary(
     .map_err(|e| CommandError::Internal(e.to_string()))??;
 
     Ok(result)
-}
-
-/// `get_compact_mode`
-///
-/// Returns the persisted gadget compact-mode flag so both the settings screen
-/// and the floating gadget window can sync their initial state on load.
-#[tauri::command]
-pub fn get_compact_mode(state: State<'_, SharedState>) -> bool {
-    *state.compact_mode.read()
-}
-
-/// `set_compact_mode`
-///
-/// Updates the gadget compact-mode flag, persists it to `settings.json` and
-/// broadcasts a `compact-mode-changed` event so the floating gadget window can
-/// re-render its idle appearance live without a restart.
-#[tauri::command]
-pub async fn set_compact_mode(
-    app: tauri::AppHandle,
-    state: State<'_, SharedState>,
-    value: bool,
-) -> Result<(), CommandError> {
-    let mode = if value {
-        WidgetVisibilityMode::Always
-    } else {
-        WidgetVisibilityMode::Auto
-    };
-    set_widget_visibility_mode(app, state, mode)
-        .await
-        .map(|_| ())
 }
 
 #[tauri::command]
@@ -1055,16 +940,6 @@ pub fn acknowledge_gadget_rendered(
 ) -> Result<bool, CommandError> {
     crate::acknowledge_gadget_rendered(&app, state.inner(), presentation, rect)
         .map_err(CommandError::Internal)
-}
-
-/// `set_gadget_hit_rect`
-///
-/// Compatibility path for older frontend bundles. Current bundles use
-/// `acknowledge_gadget_rendered`, which couples this rectangle to a native
-/// presentation generation and repaint.
-#[tauri::command]
-pub fn set_gadget_hit_rect(state: State<'_, SharedState>, rect: crate::models::GadgetHitRect) {
-    *state.gadget_hit_rect.write() = Some(rect);
 }
 
 /// `get_recording_elapsed`
@@ -1630,4 +1505,81 @@ pub async fn archive_history_audio(
     .await
     .map_err(|e| CommandError::Internal(e.to_string()))?
     .map_err(CommandError::Internal)
+}
+
+#[tauri::command]
+pub fn get_feature_settings(state: State<'_, SharedState>) -> crate::assist::FeatureSettings {
+    state.features.read().clone()
+}
+
+#[tauri::command]
+pub async fn set_feature_settings(
+    state: State<'_, SharedState>,
+    features: crate::assist::FeatureSettings,
+) -> Result<crate::assist::FeatureSettings, CommandError> {
+    let shared = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let _config = crate::models::CONFIG_LOCK.lock();
+        crate::settings::save_features(&features)?;
+        *shared.features.write() = features.clone();
+        Ok::<_, String>(features)
+    })
+    .await
+    .map_err(|error| CommandError::Internal(error.to_string()))?
+    .map_err(CommandError::Internal)
+}
+
+#[tauri::command]
+pub fn get_local_model_status(
+    model: crate::local_whisper::LocalModel,
+) -> crate::local_whisper::LocalModelStatus {
+    crate::local_whisper::status(model)
+}
+
+/// Downloads the offline Whisper model, emitting `local-model-progress`.
+#[tauri::command]
+pub async fn download_local_model(
+    app: tauri::AppHandle,
+    model: crate::local_whisper::LocalModel,
+) -> Result<crate::local_whisper::LocalModelStatus, CommandError> {
+    crate::local_whisper::download(model, |progress| {
+        let _ = tauri::Emitter::emit(&app, "local-model-progress", &progress);
+    })
+    .await
+    .map_err(CommandError::Internal)
+}
+
+#[tauri::command]
+pub async fn remove_local_model(
+    model: crate::local_whisper::LocalModel,
+) -> Result<crate::local_whisper::LocalModelStatus, CommandError> {
+    tokio::task::spawn_blocking(move || crate::local_whisper::remove(model))
+        .await
+        .map_err(|error| CommandError::Internal(error.to_string()))?
+        .map_err(CommandError::Internal)
+}
+
+#[tauri::command]
+pub async fn check_for_update(
+    app: tauri::AppHandle,
+) -> Result<crate::updates::UpdateInfo, CommandError> {
+    crate::updates::check(&app)
+        .await
+        .map_err(CommandError::Internal)
+}
+
+/// Installs the downloaded update and restarts Sonora.
+#[tauri::command]
+pub async fn install_update(
+    app: tauri::AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<(), CommandError> {
+    if state.recording_status().phase != crate::models::RecordingPhase::Idle {
+        return Err(CommandError::Internal(
+            "Termine a gravação antes de atualizar.".into(),
+        ));
+    }
+    crate::updates::install(&app)
+        .await
+        .map_err(CommandError::Internal)
 }

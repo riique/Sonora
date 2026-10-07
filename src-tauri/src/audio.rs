@@ -12,7 +12,7 @@ use std::sync::{
 };
 use tauri::{Emitter, Manager};
 
-use crate::models::{AppState, DeepgramMode, TranscriptionEngine};
+use crate::models::AppState;
 
 /// Emits the `transcribing` state boolean **only to the gadget window**,
 /// which is the sole subscriber (see `GadgetView.tsx`). Broadcast emits via
@@ -299,9 +299,6 @@ pub fn start_capture(
                         // before the buffer is drained, and the level meter only
                         // holds this lock long enough to copy a small window.
                         record_capture_block(&st, &mono);
-                        // Fan-out to live Deepgram while the user is speaking
-                        // so stop only needs a Finalize flush (not a full re-upload).
-                        push_live_deepgram_pcm(&st, &mono);
                     },
                     err_callback,
                     None,
@@ -319,7 +316,6 @@ pub fn start_capture(
                         }
                         let mono = downmix_f32(samples, ch);
                         record_capture_block(&st, &mono);
-                        push_live_deepgram_pcm(&st, &mono);
                     },
                     err_callback,
                     None,
@@ -373,54 +369,8 @@ fn downmix_f32(samples: &[f32], ch: usize) -> Vec<i16> {
     mono
 }
 
-/// Non-blocking fan-out of mono PCM into the live Deepgram session (if any).
-fn push_live_deepgram_pcm(state: &AppState, mono: &[i16]) {
-    let Some(guard) = state.deepgram_live.try_lock() else {
-        return;
-    };
-    if let Some(session) = guard.as_ref() {
-        session.push_mono_i16(mono);
-    }
-}
-
-/// Opens a live Deepgram WebSocket when mode/engine/key allow it.
-fn maybe_start_deepgram_live(state: &Arc<AppState>) {
-    // Abort any stale session from a previous recording.
-    if let Some(old) = state.deepgram_live.lock().take() {
-        old.abort();
-    }
-
-    let mode = *state.deepgram_mode.read();
-    if mode != DeepgramMode::StreamingFinal {
-        return;
-    }
-
-    let dual = *state.dual_engine.read();
-    let engine = state.active_engine();
-    let deepgram_in_path = dual || engine == TranscriptionEngine::DeepgramNova3;
-    if !deepgram_in_path {
-        return;
-    }
-
-    let api_key = state.next_deepgram_key();
-    let Some(api_key) = api_key else {
-        log::warn!(
-            "audio: streaming_final selected but Deepgram API key missing; live session skipped"
-        );
-        return;
-    };
-
-    let sample_rate = *state.capture_rate.read();
-    let session = crate::deepgram::spawn_live_session(api_key, sample_rate);
-    *state.deepgram_live.lock() = Some(session);
-    log::info!(
-        "audio: deepgram LIVE streaming_final started @ {} Hz (process while recording)",
-        sample_rate
-    );
-}
-
-/// Stops the active capture stream, builds WAV, runs the legacy transcription
-/// pipeline ([`crate::transcription`]), then clipboard + history.
+/// Stops the active capture stream, builds the WAV, runs the selected product
+/// mode ([`crate::transcription`]), then delivers the text and records history.
 pub async fn stop_capture(
     state: &Arc<AppState>,
     delivery_target: crate::context::ForegroundTarget,
@@ -449,6 +399,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
         }
     }
     let _recording_session_guard = RecordingSessionGuard(state.clone());
+    let voice_command = state.command_request.lock().take();
     let _ = state.drop_audio_stream();
 
     let spool = state.capture_spool.lock().take();
@@ -478,9 +429,6 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 log::warn!("audio: could not retire empty capture: {error}");
             }
         }
-        if let Some(session) = state.deepgram_live.lock().take() {
-            session.abort();
-        }
         if let Some(handle) = state.app_handle.read().as_ref() {
             if let Some(gadget) = handle.get_webview_window("gadget") {
                 let _ = gadget.emit("recording-no-speech", state.recording_status());
@@ -490,13 +438,6 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
         return None;
     }
 
-    if !crate::transcription::should_use_product_mode(state) {
-        maybe_start_deepgram_live(state);
-    }
-    let live_session = state.deepgram_live.lock().take();
-    if let Some(ref session) = live_session {
-        session.catch_up_from_buffer(&raw_samples);
-    }
     let raw_count = raw_samples.len();
     let duration_ms = (raw_count as u64 * 1000) / capture_rate as u64;
 
@@ -543,8 +484,6 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
         wav.len() / 1024
     );
 
-    let engine = state.active_engine();
-    let start_time = std::time::Instant::now();
     let id = chrono_like_id();
     crate::pipeline_run::emit_pipeline_progress(
         state,
@@ -563,11 +502,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
     }
     let audio_prepare_ms = audio_prepare_started.elapsed().as_millis() as u64;
 
-    // Product modes (UltraFast / FastAccurate) — abort unused Deepgram live session.
-    if crate::transcription::should_use_product_mode(state) {
-        if let Some(session) = live_session {
-            session.abort();
-        }
+    {
         let mode = *state.transcription_mode.read();
         crate::pipeline_run::emit_pipeline_progress(
             state,
@@ -598,7 +533,22 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                     crate::pipeline_run::StageKind::AudioPrepare,
                     audio_prepare_ms,
                 ));
-                let _ = start_time.elapsed();
+                if let Some(request) = voice_command {
+                    if let Err(error) = apply_voice_command(state, &mut result, request).await {
+                        let mut entry = crate::transcription::mode_failed_history(
+                            id,
+                            now_timestamp(),
+                            audio_path,
+                            duration_ms,
+                            "mic",
+                            mode,
+                            error,
+                        );
+                        attach_pending_failed_run(state, &mut entry);
+                        persist_and_notify(state, &entry);
+                        return None;
+                    }
+                }
                 let final_text = result.final_text.clone();
                 crate::pipeline_run::emit_pipeline_progress(
                     state,
@@ -630,7 +580,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                     },
                 );
                 log::debug!("audio: mode output ({} chars)", final_text.len());
-                return Some(final_text);
+                Some(final_text)
             }
             Err(err_msg) => {
                 crate::pipeline_run::emit_pipeline_progress(
@@ -653,121 +603,10 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 );
                 attach_pending_failed_run(state, &mut entry);
                 persist_and_notify(state, &entry);
-                return None;
+                None
             }
         }
     }
-
-    // Legacy engine / dual / sanitizer path.
-    crate::pipeline_run::emit_pipeline_progress(
-        state,
-        crate::pipeline_run::PipelineProgressEvent {
-            kind: crate::pipeline_run::PipelineProgressKind::Recognizing,
-            run_id: Some(id.clone()),
-            message: Some("Reconhecendo fala".into()),
-            ..Default::default()
-        },
-    );
-    let acoustic = match crate::transcription::run_acoustic_mic(state, wav, live_session).await {
-        Ok(a) => a,
-        Err(err_msg) => {
-            let entry = crate::transcription::build_failed_entry(
-                crate::transcription::pipeline::BuildFailedEntryInput {
-                    state,
-                    id,
-                    date: now_timestamp(),
-                    audio_path,
-                    duration_ms,
-                    source: "mic",
-                    engine,
-                    error_msg: err_msg,
-                },
-            );
-            persist_and_notify(state, &entry);
-            return None;
-        }
-    };
-
-    if acoustic.whisper_text.trim().is_empty() && acoustic.deepgram_text.trim().is_empty() {
-        let entry = crate::transcription::build_failed_entry(
-            crate::transcription::pipeline::BuildFailedEntryInput {
-                state,
-                id,
-                date: now_timestamp(),
-                audio_path,
-                duration_ms,
-                source: "mic",
-                engine,
-                error_msg: "Nenhum texto detectado na gravação.".to_string(),
-            },
-        );
-        persist_and_notify(state, &entry);
-        return None;
-    }
-
-    let elapsed = start_time.elapsed().as_millis() as u64;
-    crate::pipeline_run::emit_pipeline_progress(
-        state,
-        crate::pipeline_run::PipelineProgressEvent {
-            kind: crate::pipeline_run::PipelineProgressKind::Refining,
-            run_id: Some(id.clone()),
-            message: Some("Refinando transcrição".into()),
-            ..Default::default()
-        },
-    );
-    let sanitize = crate::transcription::run_sanitize(
-        state,
-        &acoustic.whisper_text,
-        &acoustic.deepgram_text,
-        acoustic.effective_dual,
-    )
-    .await;
-
-    let final_text = sanitize.final_text.clone();
-    crate::pipeline_run::emit_pipeline_progress(
-        state,
-        crate::pipeline_run::PipelineProgressEvent {
-            kind: crate::pipeline_run::PipelineProgressKind::Delivering,
-            run_id: Some(id.clone()),
-            message: Some("Entregando texto".into()),
-            ..Default::default()
-        },
-    );
-    deliver_clipboard_and_paste(&final_text).await;
-
-    let entry = crate::transcription::build_success_entry(
-        crate::transcription::pipeline::BuildSuccessEntryInput {
-            state,
-            id,
-            date: now_timestamp(),
-            audio_path,
-            engine,
-            whisper_text: &acoustic.whisper_text,
-            deepgram_text: &acoustic.deepgram_text,
-            final_text: final_text.clone(),
-            duration_ms,
-            source: "mic",
-            transcription_latency_ms: elapsed,
-            dual_mode: acoustic.effective_dual,
-            deepgram_ran: acoustic.deepgram_ran,
-            sanitize: &sanitize,
-            log_context: "mic",
-        },
-    );
-    if !persist_and_notify(state, &entry) {
-        return None;
-    }
-    crate::pipeline_run::emit_pipeline_progress(
-        state,
-        crate::pipeline_run::PipelineProgressEvent {
-            kind: crate::pipeline_run::PipelineProgressKind::Complete,
-            run_id: Some(entry.id.clone()),
-            ..Default::default()
-        },
-    );
-
-    log::debug!("audio: final output ({} chars)", final_text.len());
-    Some(final_text)
 }
 
 /// Polyphase windowed-sinc resampling with low-pass filtering before decimation.
@@ -829,6 +668,42 @@ pub(crate) fn resample(input: &[i16], from_rate: u32, to_rate: u32) -> Vec<i16> 
     output
 }
 
+/// Voice command: the transcript is an instruction. Rewrites the captured
+/// selection (or writes new text) and pastes the result over the selection.
+async fn apply_voice_command(
+    state: &AppState,
+    run: &mut crate::pipeline_run::PipelineRun,
+    request: crate::models::CommandRequest,
+) -> Result<(), String> {
+    let instruction = run.final_text.trim().to_string();
+    if instruction.is_empty() {
+        return Err("Nenhuma instrução foi reconhecida.".into());
+    }
+    crate::pipeline_run::emit_pipeline_progress(
+        state,
+        crate::pipeline_run::PipelineProgressEvent {
+            kind: crate::pipeline_run::PipelineProgressKind::Refining,
+            message: Some("Aplicando comando".into()),
+            ..Default::default()
+        },
+    );
+    let out = crate::assist::run_command(state, &instruction, request.selection.as_deref())
+        .await
+        .map_err(|error| format!("Modo comando: {error}"))?;
+    run.final_text = out.text.trim().to_string();
+    run.stages.push(format!("voice_command:{}", out.provider));
+    run.stages.push(if request.selection.is_some() {
+        "voice_command_selection".into()
+    } else {
+        "voice_command_compose".into()
+    });
+    run.transcript.formatted = Some(run.final_text.clone());
+    run.destination = crate::output_policy::DictationDestination::FocusedField;
+    run.delivery.destination = run.destination;
+    crate::transcription::modes::record_assist_call(run, "attempt-voice-command", &out);
+    Ok(())
+}
+
 async fn write_clipboard(
     final_text: &str,
     permit: Option<crate::operations::Permit>,
@@ -874,19 +749,6 @@ fn attach_pending_failed_run(state: &AppState, entry: &mut crate::models::Histor
 
 // Compatibility path for the dormant legacy pipeline. Product modes use the
 // structured delivery function below and retain its target-safety evidence.
-async fn deliver_clipboard_and_paste(final_text: &str) {
-    match write_clipboard(final_text, None).await {
-        Ok(()) => {
-            if let Err(error) =
-                paste_into_focused_field(crate::context::ForegroundTarget::default(), None)
-            {
-                log::warn!("audio: legacy auto-paste failed: {}", error);
-            }
-        }
-        Err(error) => log::error!("audio: legacy clipboard delivery failed: {}", error),
-    }
-}
-
 async fn deliver_pipeline_result(state: &AppState, run: &mut crate::pipeline_run::PipelineRun) {
     use crate::output_policy::DictationDestination;
     use crate::pipeline_run::{DeliveryRecord, PipelineError, StageKind, StageRecord};
@@ -1116,18 +978,9 @@ async fn retry_transcription_handler_with_strategy_inner(
         .unwrap_or_else(|| "wav".to_string());
     let mime = crate::audio_store::mime_for_ext(&ext);
 
-    let engine = state.active_engine();
-    let start_time = std::time::Instant::now();
+    log::info!("audio: retrying transcription for {}", id);
 
-    log::info!(
-        "audio: retrying transcription for {} modes={} engine={:?} dual={}",
-        id,
-        crate::transcription::should_use_product_mode(state),
-        engine,
-        *state.dual_engine.read()
-    );
-
-    if crate::transcription::should_use_product_mode(state) {
+    {
         let mode = *state.transcription_mode.read();
         struct RetrySessionGuard(Arc<AppState>, bool);
         impl Drop for RetrySessionGuard {
@@ -1201,7 +1054,7 @@ async fn retry_transcription_handler_with_strategy_inner(
                     &result,
                 );
                 persist_retry(state, &updated)?;
-                return Ok(final_text);
+                Ok(final_text)
             }
             Err(msg) => {
                 let mut failed = crate::transcription::mode_failed_history(
@@ -1215,59 +1068,10 @@ async fn retry_transcription_handler_with_strategy_inner(
                 );
                 attach_pending_failed_run(state, &mut failed);
                 persist_retry(state, &failed)?;
-                return Err(msg);
+                Err(msg)
             }
         }
     }
-
-    let acoustic =
-        match crate::transcription::run_acoustic_file(state, bytes, "audio.wav", mime).await {
-            Ok(a) => a,
-            Err(msg) => return Err(fail(state, &entry, msg)),
-        };
-
-    if acoustic.whisper_text.trim().is_empty() && acoustic.deepgram_text.trim().is_empty() {
-        let msg = "Nenhum texto foi detectado no áudio durante a retentativa.".to_string();
-        return Err(fail(state, &entry, msg));
-    }
-
-    let elapsed = start_time.elapsed().as_millis() as u64;
-    let sanitize = crate::transcription::run_sanitize(
-        state,
-        &acoustic.whisper_text,
-        &acoustic.deepgram_text,
-        acoustic.effective_dual,
-    )
-    .await;
-
-    let final_text = sanitize.final_text.clone();
-    if entry.source == "mic" {
-        deliver_clipboard_and_paste(&final_text).await;
-    }
-
-    let updated_entry = crate::transcription::build_success_entry(
-        crate::transcription::pipeline::BuildSuccessEntryInput {
-            state,
-            id: entry.id.clone(),
-            date: entry.date.clone(),
-            audio_path: Some(audio_path),
-            engine,
-            whisper_text: &acoustic.whisper_text,
-            deepgram_text: &acoustic.deepgram_text,
-            final_text: final_text.clone(),
-            duration_ms: entry.duration_ms,
-            source: &entry.source,
-            transcription_latency_ms: elapsed,
-            dual_mode: acoustic.effective_dual,
-            deepgram_ran: acoustic.deepgram_ran,
-            sanitize: &sanitize,
-            log_context: "retry",
-        },
-    );
-
-    persist_retry(state, &updated_entry)?;
-
-    Ok(final_text)
 }
 
 async fn run_forced_fallback(
@@ -1285,23 +1089,9 @@ async fn run_forced_fallback(
         .flat_map(|run| run.attempts.iter())
         .map(|attempt| attempt.provider.to_ascii_lowercase())
         .collect::<std::collections::HashSet<_>>();
-    let has_deepgram = !state.api_keys.read().deepgram.is_empty();
-    let (engine, provider, model, transport) = if !already_used.contains("deepgram") && has_deepgram
-    {
-        (
-            TranscriptionEngine::DeepgramNova3,
-            "deepgram",
-            "nova-3",
-            AudioTransport::RawBinary,
-        )
-    } else {
-        (
-            TranscriptionEngine::GroqWhisper,
-            "groq",
-            "whisper-large-v3-turbo",
-            AudioTransport::Multipart,
-        )
-    };
+    let _ = already_used;
+    let (provider, model, transport) =
+        ("groq", "whisper-large-v3-turbo", AudioTransport::Multipart);
     crate::pipeline_run::emit_pipeline_progress(
         state,
         crate::pipeline_run::PipelineProgressEvent {
@@ -1317,7 +1107,7 @@ async fn run_forced_fallback(
     let started_at_ms = crate::pipeline_run::epoch_ms();
     let started = std::time::Instant::now();
     let text_result =
-        crate::transcription::transcribe_bytes(state, bytes, "audio.wav", mime, engine).await;
+        crate::transcription::transcribe_groq_whisper(state, bytes, "audio.wav", mime).await;
     let duration_ms = started.elapsed().as_millis() as u64;
     let text = match text_result {
         Ok(text) => text,
@@ -1363,8 +1153,7 @@ async fn run_forced_fallback(
             .map(|run| run.mode)
             .unwrap_or(*state.transcription_mode.read()),
         final_text: text.clone(),
-        whisper_text: (provider == "groq").then_some(text.clone()),
-        deepgram_text: (provider == "deepgram").then_some(text.clone()),
+        whisper_text: Some(text.clone()),
         model: model.into(),
         history_engine_label: format!("forced-fallback/{provider}"),
         attempts: vec![ProviderAttempt {
@@ -1514,20 +1303,12 @@ pub(crate) async fn transcribe_file_path_inner(
         .unwrap_or_else(|| "wav".to_string());
     let mime = crate::audio_store::mime_for_ext(&ext);
 
-    let engine = state.active_engine();
-    log::info!(
-        "audio: upload '{}' ({}), modes={} engine {:?}",
-        file_name,
-        mime,
-        crate::transcription::should_use_product_mode(state),
-        engine
-    );
+    log::info!("audio: upload '{}' ({})", file_name, mime);
 
-    let start_time = std::time::Instant::now();
     let id = chrono_like_id();
     let audio_path = crate::audio_store::save(&id, &ext, &bytes);
 
-    if crate::transcription::should_use_product_mode(state) {
+    {
         let mode = *state.transcription_mode.read();
         match crate::transcription::run_product_mode_with_duration(
             state, bytes, &file_name, mime, &ext, None,
@@ -1547,7 +1328,7 @@ pub(crate) async fn transcribe_file_path_inner(
                 if !persist_and_notify(state, &entry) {
                     return Err("Falha ao salvar; áudio preservado para recuperação".into());
                 }
-                return Ok(final_text);
+                Ok(final_text)
             }
             Err(err_msg) => {
                 let full_msg = format!(
@@ -1565,88 +1346,10 @@ pub(crate) async fn transcribe_file_path_inner(
                 );
                 attach_pending_failed_run(state, &mut entry);
                 persist_and_notify(state, &entry);
-                return Err(full_msg);
+                Err(full_msg)
             }
         }
     }
-
-    let acoustic =
-        match crate::transcription::run_acoustic_file(state, bytes, &file_name, mime).await {
-            Ok(a) => a,
-            Err(err_msg) => {
-                let full_msg = format!(
-                    "Falha na transcrição do arquivo {:?}: {}",
-                    file_name, err_msg
-                );
-                let entry = crate::transcription::build_failed_entry(
-                    crate::transcription::pipeline::BuildFailedEntryInput {
-                        state,
-                        id,
-                        date: now_timestamp(),
-                        audio_path,
-                        duration_ms: 0,
-                        source: "file",
-                        engine,
-                        error_msg: full_msg.clone(),
-                    },
-                );
-                persist_and_notify(state, &entry);
-                return Err(full_msg);
-            }
-        };
-
-    if acoustic.whisper_text.trim().is_empty() && acoustic.deepgram_text.trim().is_empty() {
-        let err_msg = "Nenhum texto detectado no arquivo de áudio.".to_string();
-        let entry = crate::transcription::build_failed_entry(
-            crate::transcription::pipeline::BuildFailedEntryInput {
-                state,
-                id,
-                date: now_timestamp(),
-                audio_path,
-                duration_ms: 0,
-                source: "file",
-                engine,
-                error_msg: err_msg.clone(),
-            },
-        );
-        persist_and_notify(state, &entry);
-        return Err(err_msg);
-    }
-
-    let elapsed = start_time.elapsed().as_millis() as u64;
-    let sanitize = crate::transcription::run_sanitize(
-        state,
-        &acoustic.whisper_text,
-        &acoustic.deepgram_text,
-        acoustic.effective_dual,
-    )
-    .await;
-
-    let final_text = sanitize.final_text.clone();
-    let entry = crate::transcription::build_success_entry(
-        crate::transcription::pipeline::BuildSuccessEntryInput {
-            state,
-            id,
-            date: now_timestamp(),
-            audio_path,
-            engine,
-            whisper_text: &acoustic.whisper_text,
-            deepgram_text: &acoustic.deepgram_text,
-            final_text: final_text.clone(),
-            duration_ms: 0,
-            source: "file",
-            transcription_latency_ms: elapsed,
-            dual_mode: acoustic.effective_dual,
-            deepgram_ran: acoustic.deepgram_ran,
-            sanitize: &sanitize,
-            log_context: "file",
-        },
-    );
-    if !persist_and_notify(state, &entry) {
-        return Err("Falha ao salvar; áudio preservado para recuperação".into());
-    }
-
-    Ok(final_text)
 }
 
 /// Produces a reasonably-unique id string from the current system time
@@ -1661,7 +1364,7 @@ fn chrono_like_id() -> String {
 
 /// Returns the current local time formatted as `YYYY-MM-DD HH:MM`.
 /// Local wall-clock label `YYYY-MM-DD HH:MM` (not UTC).
-fn now_timestamp() -> String {
+pub(crate) fn now_timestamp() -> String {
     #[cfg(windows)]
     {
         use windows::Win32::System::SystemInformation::GetLocalTime;
@@ -1701,13 +1404,10 @@ fn now_timestamp() -> String {
 /// without building a WAV buffer. Used by the panic shortcut.
 pub fn cancel_capture(state: &Arc<AppState>) {
     let _ = state.drop_audio_stream();
-    if let Some(session) = state.deepgram_live.lock().take() {
-        session.abort();
-        log::info!("audio: deepgram live session aborted on cancel");
-    }
     state.clear_audio_buffer();
     state.capture_spool.lock().take();
     state.recording_session.lock().take();
+    state.command_request.lock().take();
     log::info!("audio: capture cancelled, buffers released");
 }
 

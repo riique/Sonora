@@ -24,15 +24,19 @@ pub fn apply_backtrack(text: &str, level: FormattingLevel) -> TransformationOutc
     if level == FormattingLevel::Literal {
         return unchanged(text);
     }
+    // A bare " não, " is ordinary Portuguese ("acho que não, a gente vai"), so a
+    // correction needs a pause marker before it: ellipsis or a comma.
     let markers = [
         "... não, ",
         "… não, ",
-        " não, ",
+        ", não, ",
         "... quer dizer, ",
         "… quer dizer, ",
         " quer dizer, ",
     ];
-    let lower = text.to_lowercase();
+    let Some(lower) = lowercase_aligned(text) else {
+        return unchanged(text);
+    };
     let Some((position, marker)) = markers
         .iter()
         .filter_map(|marker| lower.rfind(marker).map(|position| (position, *marker)))
@@ -54,8 +58,10 @@ pub fn apply_backtrack(text: &str, level: FormattingLevel) -> TransformationOutc
         .iter()
         .find(|relation| correction_lower.starts_with(**relation))
     {
+        // `lowercase_aligned` succeeded for the whole text, so offsets in the
+        // lowercase copy of `before` are valid in `before` too.
         let before_lower = before.to_lowercase();
-        if let Some(relation_position) = before_lower.rfind(relation) {
+        if let Some(relation_position) = rfind_word(&before_lower, relation) {
             let prefix = before[..relation_position].trim_end();
             let output = format!("{} {}", prefix, correction).trim().to_string();
             return changed(output, "backtrack_explicit_correction");
@@ -168,19 +174,37 @@ fn explicit_list(text: &str) -> String {
 fn replace_spoken_command(text: &str, commands: &[&str], replacement: &str) -> String {
     let mut output = text.to_string();
     for command in commands {
+        let mut search_from = 0;
         loop {
-            let lower = output.to_lowercase();
-            let Some(position) = lower.find(command) else {
+            let Some(lower) = lowercase_aligned(&output) else {
+                return output;
+            };
+            let Some(found) = lower[search_from..].find(command) else {
                 break;
             };
-            output.replace_range(position..position + command.len(), replacement);
+            let start = search_from + found;
+            let end = start + command.len();
+            if !is_word_boundary(&output, start) || !is_word_boundary(&output, end) {
+                search_from = end;
+                continue;
+            }
+            // Recognizers usually wrap the command in punctuation ("texto. Nova linha. Mais"),
+            // which must not leak into the output as " \n. ".
+            let before = output[..start].trim_end_matches([' ', ',']);
+            let after = output[end..]
+                .trim_start_matches(['.', ',', ';', ':', '!', '?'])
+                .trim_start_matches(' ');
+            search_from = before.len() + replacement.len();
+            output = format!("{before}{replacement}{after}");
         }
     }
     output
 }
 
 fn find_all_case_insensitive(text: &str, needle: &str) -> Vec<usize> {
-    let lower = text.to_lowercase();
+    let Some(lower) = lowercase_aligned(text) else {
+        return Vec::new();
+    };
     let mut positions = Vec::new();
     let mut offset = 0;
     while let Some(position) = lower[offset..].find(needle) {
@@ -188,6 +212,34 @@ fn find_all_case_insensitive(text: &str, needle: &str) -> Vec<usize> {
         offset += position + needle.len();
     }
     positions
+}
+
+/// Lowercases `text` only when every character keeps its UTF-8 length, so byte
+/// offsets found in the lowercase copy are valid slice indices in `text`.
+fn lowercase_aligned(text: &str) -> Option<String> {
+    text.chars()
+        .all(|character| {
+            character.to_lowercase().map(char::len_utf8).sum::<usize>() == character.len_utf8()
+        })
+        .then(|| text.to_lowercase())
+}
+
+fn is_word_boundary(text: &str, index: usize) -> bool {
+    let before = text[..index].chars().next_back();
+    let after = text[index..].chars().next();
+    !(before.is_some_and(char::is_alphanumeric) && after.is_some_and(char::is_alphanumeric))
+}
+
+/// Last occurrence of `needle` that starts a word (so "a " never matches the end of "Maria ").
+fn rfind_word(haystack: &str, needle: &str) -> Option<usize> {
+    let mut end = haystack.len();
+    while let Some(position) = haystack[..end].rfind(needle) {
+        if is_word_boundary(haystack, position) {
+            return Some(position);
+        }
+        end = position;
+    }
+    None
 }
 
 fn capitalize_sentence_start(text: &str) -> String {
@@ -227,12 +279,16 @@ pub struct ProtectedSpan {
 pub fn protected_spans(text: &str) -> Vec<ProtectedSpan> {
     text.split_whitespace()
         .filter_map(|raw| {
-            let value = raw.trim_matches(|character: char| {
-                matches!(
-                    character,
-                    ',' | ';' | ':' | '(' | ')' | '[' | ']' | '"' | '\''
-                )
-            });
+            let value = raw
+                .trim_matches(|character: char| {
+                    matches!(
+                        character,
+                        ',' | ';' | ':' | '(' | ')' | '[' | ']' | '"' | '\''
+                    )
+                })
+                // Sentence punctuation belongs to the prose, not to the span: a
+                // refinement that turns "Github." into "GitHub," must not be rejected.
+                .trim_end_matches(['.', '!', '?', '…']);
             let kind = classify_protected(value)?;
             Some(ProtectedSpan {
                 value: value.to_string(),
@@ -276,11 +332,14 @@ fn classify_protected(value: &str) -> Option<&'static str> {
     if value.contains('_') || value.contains("::") || value.contains("->") {
         return Some("identifier");
     }
+    // camelCase / PascalCase / iPhone-style identifiers. A plain capitalized word
+    // ("Maria", "Amanhã") is prose and must stay editable by the refinement.
     if value
         .chars()
         .any(|character| character.is_ascii_lowercase())
         && value
             .chars()
+            .skip(1)
             .any(|character| character.is_ascii_uppercase())
         && !value.contains(' ')
     {
@@ -383,7 +442,7 @@ mod tests {
         assert_eq!(
             apply_smart_formatting(input, FormattingLevel::Literal, FormattingTarget::PlainText)
                 .text,
-            "primeira linha \n segunda linha"
+            "primeira linha\nsegunda linha"
         );
         assert_eq!(
             apply_smart_formatting(
@@ -419,6 +478,95 @@ mod tests {
         )
         .text
         .starts_with('-'));
+    }
+
+    #[test]
+    fn ordinary_negation_is_not_a_backtrack() {
+        for input in [
+            "Ela falou com a Maria que não, a gente vai depois",
+            "Acho que não, a reunião foi cancelada",
+            "Eu acho que não, para mim tanto faz",
+        ] {
+            assert_eq!(apply_backtrack(input, FormattingLevel::Smart).text, input);
+        }
+        assert_eq!(
+            apply_backtrack("marca para duas, não, para três", FormattingLevel::Smart).text,
+            "marca para três"
+        );
+    }
+
+    #[test]
+    fn relation_words_match_whole_words_only() {
+        // "a " must not match the tail of "Maria " when locating the corrected phrase.
+        assert_eq!(
+            apply_backtrack(
+                "entrega a caixa grande... não, a menor",
+                FormattingLevel::Smart
+            )
+            .text,
+            "entrega a menor"
+        );
+    }
+
+    #[test]
+    fn spoken_commands_absorb_recognizer_punctuation() {
+        assert_eq!(
+            apply_smart_formatting(
+                "Primeiro parágrafo. Novo parágrafo. Segundo parágrafo.",
+                FormattingLevel::Smart,
+                FormattingTarget::PlainText
+            )
+            .text,
+            "Primeiro parágrafo.\n\nSegundo parágrafo."
+        );
+        assert_eq!(
+            apply_smart_formatting(
+                "texto, nova linha, mais texto",
+                FormattingLevel::Literal,
+                FormattingTarget::PlainText
+            )
+            .text,
+            "texto\nmais texto"
+        );
+        // Not a command when glued to another word.
+        assert_eq!(
+            apply_smart_formatting(
+                "renova linhas",
+                FormattingLevel::Literal,
+                FormattingTarget::PlainText
+            )
+            .text,
+            "renova linhas"
+        );
+    }
+
+    #[test]
+    fn non_ascii_case_folding_never_panics() {
+        let input = "İstanbul... não, para Ancara";
+        assert_eq!(apply_backtrack(input, FormattingLevel::Smart).text, input);
+        let _ = apply_smart_formatting(
+            "İ nova linha ẞ",
+            FormattingLevel::Smart,
+            FormattingTarget::Markdown,
+        );
+    }
+
+    #[test]
+    fn code_guard_allows_prose_edits_around_capitalized_words() {
+        let raw = "Oi Maria, tudo bem? Amanhã a gente vai no Github. Ok";
+        let refined = "Oi, Maria, tudo bem? Amanhã a gente vai no GitHub. OK.";
+        let outcome = enforce_protected_spans(raw, refined);
+        assert_eq!(outcome.text, refined);
+        assert!(outcome.warnings.is_empty());
+        // Real identifiers remain protected even with trailing sentence punctuation.
+        assert_eq!(
+            enforce_protected_spans("use o useEffect.", "use o use effect.").text,
+            "use o useEffect."
+        );
+        assert_eq!(
+            enforce_protected_spans("abra o index.tsx.", "abra o index tsx.").text,
+            "abra o index.tsx."
+        );
     }
 
     #[test]

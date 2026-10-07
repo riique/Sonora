@@ -33,7 +33,9 @@ jobs:
       - run: cargo install cargo-audit --locked --version 0.22.2
       - run: cargo audit
         working-directory: src-tauri
-      - run: npm run tauri build
+      # Qualification builds are unsigned; only the Release workflow signs
+      # updater artifacts with TAURI_SIGNING_PRIVATE_KEY.
+      - run: npm run tauri build -- --config src-tauri/tauri.qualification.conf.json
       - name: Package checksums
         shell: pwsh
         run: |

@@ -290,22 +290,113 @@ pub fn handle_cancel(app: &AppHandle, state: &SharedState) {
     }
 }
 
-/// Registers the toggle and cancel global shortcuts with the given key
-/// combinations. The handler closures clone the `SharedState` handle so they
-/// can read/flip the recording flag and drive the audio pipeline without the
+fn recording_active(state: &SharedState) -> bool {
+    matches!(
+        state.recording_status().phase,
+        RecordingPhase::Starting | RecordingPhase::Recording
+    )
+}
+
+/// Applies a key transition of a recording shortcut. Toggle mode reacts to
+/// presses only; hold-to-talk starts on press and stops on release. Key
+/// auto-repeat sends extra presses while held, so hold mode ignores presses
+/// while a recording is already running.
+fn on_record_key(app: &AppHandle, state: &SharedState, pressed: bool, command: bool) {
+    let hold = state.shortcuts.read().hold_to_talk;
+    let active = recording_active(state);
+    let should_toggle = match (hold, pressed) {
+        (false, true) => true,
+        (false, false) => false,
+        (true, true) => !active,
+        (true, false) => active,
+    };
+    if !should_toggle {
+        return;
+    }
+    if command && !active {
+        start_voice_command(app, state);
+    } else {
+        handle_toggle(app, state);
+    }
+}
+
+/// Copies the current selection (restoring the user's clipboard afterwards),
+/// then starts a recording whose transcript is treated as an instruction.
+fn start_voice_command(app: &AppHandle, state: &SharedState) {
+    let app = app.clone();
+    let state = state.clone();
+    std::thread::spawn(move || {
+        let selection = capture_selection();
+        log::info!(
+            "shortcut: voice command started (selection: {} chars)",
+            selection.as_ref().map_or(0, |text| text.chars().count())
+        );
+        *state.command_request.lock() = Some(crate::models::CommandRequest { selection });
+        let main_app = app.clone();
+        let main_state = state.clone();
+        if app
+            .run_on_main_thread(move || {
+                if !handle_toggle(&main_app, &main_state) {
+                    main_state.command_request.lock().take();
+                }
+            })
+            .is_err()
+        {
+            state.command_request.lock().take();
+        }
+    });
+}
+
+fn capture_selection() -> Option<String> {
+    use enigo::{
+        Direction::{Click, Press, Release},
+        Enigo, Key, Keyboard, Settings,
+    };
+    let mut clipboard = arboard::Clipboard::new().ok()?;
+    let previous = clipboard.get_text().ok();
+    let _ = clipboard.clear();
+    let mut enigo = Enigo::new(&Settings::default()).ok()?;
+    // The command shortcut is usually still physically held (Ctrl+Shift+B):
+    // release Shift/Alt first so the app receives Ctrl+C, not Ctrl+Shift+C.
+    let _ = enigo.key(Key::Shift, Release);
+    let _ = enigo.key(Key::Alt, Release);
+    #[cfg(target_os = "windows")]
+    let c_key = Key::C;
+    #[cfg(not(target_os = "windows"))]
+    let c_key = Key::Unicode('c');
+    let _ = enigo.key(Key::Control, Press);
+    let copied = enigo.key(c_key, Click);
+    let _ = enigo.key(Key::Control, Release);
+    copied.ok()?;
+    std::thread::sleep(std::time::Duration::from_millis(180));
+    let selection = clipboard
+        .get_text()
+        .ok()
+        .filter(|text| !text.trim().is_empty());
+    match previous {
+        Some(previous) => {
+            let _ = clipboard.set_text(previous);
+        }
+        None => {
+            let _ = clipboard.clear();
+        }
+    }
+    selection
+}
+
+/// Registers the global shortcuts. The handler closures clone the
+/// `SharedState` handle so they can drive the audio pipeline without the
 /// `State<'_>` injection (which is only valid inside a `#[tauri::command]`).
 ///
 /// An invalid or already-claimed combination surfaces as
 /// [`ShortcutError::Register`], which the caller uses to validate a rebind.
-pub fn register_all(app: &AppHandle, toggle: &str, cancel: &str) -> Result<(), ShortcutError> {
+pub fn register_all(app: &AppHandle, config: &ShortcutConfig) -> Result<(), ShortcutError> {
+    let toggle = config.toggle.as_str();
+    let cancel = config.cancel.as_str();
     app.global_shortcut()
         .on_shortcut(toggle, move |app_h, _sc, event| {
-            // The callback fires on both key-down and key-up. Only react to
-            // the key-down transition to avoid double-toggling.
-            if event.state == ShortcutState::Pressed {
-                let s = app_h.state::<SharedState>().inner().clone();
-                handle_toggle(app_h, &s);
-            }
+            let s = app_h.state::<SharedState>().inner().clone();
+            on_record_key(app_h, &s, event.state == ShortcutState::Pressed, false);
         })
         .map_err(|e| ShortcutError::Register {
             shortcut: toggle.to_string(),
@@ -324,7 +415,26 @@ pub fn register_all(app: &AppHandle, toggle: &str, cancel: &str) -> Result<(), S
             source: e,
         })?;
 
-    log::info!("global shortcuts registered: {} and {}", toggle, cancel);
+    let command = config.command.trim();
+    if !command.is_empty() {
+        app.global_shortcut()
+            .on_shortcut(command, move |app_h, _sc, event| {
+                let s = app_h.state::<SharedState>().inner().clone();
+                on_record_key(app_h, &s, event.state == ShortcutState::Pressed, true);
+            })
+            .map_err(|e| ShortcutError::Register {
+                shortcut: command.to_string(),
+                source: e,
+            })?;
+    }
+
+    log::info!(
+        "global shortcuts registered: {} / {} / command {} (hold_to_talk={})",
+        toggle,
+        cancel,
+        if command.is_empty() { "off" } else { command },
+        config.hold_to_talk
+    );
     Ok(())
 }
 
@@ -336,41 +446,55 @@ pub fn register_all(app: &AppHandle, toggle: &str, cancel: &str) -> Result<(), S
 pub fn apply_new(
     app: &AppHandle,
     state: &SharedState,
-    toggle: String,
-    cancel: String,
+    requested: ShortcutConfig,
 ) -> Result<ShortcutConfig, String> {
-    let toggle = toggle.trim().to_string();
-    let cancel = cancel.trim().to_string();
+    let cfg = ShortcutConfig {
+        toggle: requested.toggle.trim().to_string(),
+        cancel: requested.cancel.trim().to_string(),
+        command: requested.command.trim().to_string(),
+        hold_to_talk: requested.hold_to_talk,
+    };
 
-    if toggle.is_empty() || cancel.is_empty() {
+    if cfg.toggle.is_empty() || cfg.cancel.is_empty() {
         return Err("os atalhos não podem ficar vazios".to_string());
     }
-    if toggle.eq_ignore_ascii_case(&cancel) {
-        return Err("os atalhos de iniciar e cancelar devem ser diferentes".to_string());
+    let distinct = [&cfg.toggle, &cfg.cancel, &cfg.command]
+        .iter()
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let expected = if cfg.command.is_empty() { 2 } else { 3 };
+    if distinct != expected {
+        return Err("cada atalho precisa ser diferente dos outros".to_string());
     }
 
     // Start from a clean slate so the previous combinations are released.
     let _ = app.global_shortcut().unregister_all();
 
-    match register_all(app, &toggle, &cancel) {
+    match register_all(app, &cfg) {
         Ok(()) => {
-            let cfg = ShortcutConfig { toggle, cancel };
             if let Err(error) = save_store(&cfg) {
                 let previous = state.shortcuts.read().clone();
                 let _ = app.global_shortcut().unregister_all();
-                register_all(app, &previous.toggle, &previous.cancel)
+                register_all(app, &previous)
                     .map_err(|restore| format!("{error}; falha ao restaurar atalhos: {restore}"))?;
                 return Err(error);
             }
             *state.shortcuts.write() = cfg.clone();
-            log::info!("shortcuts: rebound to {} / {}", cfg.toggle, cfg.cancel);
+            log::info!(
+                "shortcuts: rebound to {} / {} / {}",
+                cfg.toggle,
+                cfg.cancel,
+                cfg.command
+            );
             Ok(cfg)
         }
         Err(e) => {
             // Restore the previous, known-good binding.
             let prev = state.shortcuts.read().clone();
             let _ = app.global_shortcut().unregister_all();
-            let _ = register_all(app, &prev.toggle, &prev.cancel);
+            let _ = register_all(app, &prev);
             Err(format!(
                 "não foi possível registrar esse atalho (pode estar em uso por outro app): {}",
                 e

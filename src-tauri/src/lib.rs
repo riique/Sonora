@@ -1,16 +1,17 @@
+pub mod assist;
 pub mod audio;
 pub mod audio_processing;
 pub mod audio_store;
 pub mod capture_spool;
 pub mod commands;
 pub mod context;
-pub mod deepgram;
 pub mod gemini;
 pub mod groq;
 pub mod history;
 pub mod insights;
 pub mod insights_intelligence;
 pub mod learning;
+pub mod local_whisper;
 pub mod maintenance;
 pub mod meta_asr;
 pub mod mic_control;
@@ -33,6 +34,7 @@ pub mod speech_presence;
 pub mod storage;
 pub mod transcription;
 pub mod transformations;
+pub mod updates;
 pub mod vocabulary;
 
 use models::{
@@ -1422,6 +1424,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state.clone())
         .setup({
             let state = state.clone();
@@ -1464,6 +1467,7 @@ pub fn run() {
                         scratchpad::init(dir.clone());
                         snippets::init(dir.clone());
                         learning::init(dir.clone());
+                        local_whisper::init(dir.clone());
                         insights::init(dir.clone());
                         *state.compact_mode.write() = settings::load_compact();
                         *state.widget_visibility_mode.write() =
@@ -1494,6 +1498,7 @@ pub fn run() {
                         *state.formatting_level.write() = settings::load_formatting_level();
                         *state.dictation_destination.write() =
                             settings::load_dictation_destination();
+                        *state.features.write() = settings::load_features();
                         insights::start_backfill(app.handle().clone());
                     }
                     Err(e) => {
@@ -1505,7 +1510,7 @@ pub fn run() {
                 // persisted) config. A bad persisted combination is logged
                 // rather than crashing startup.
                 let cfg = state.shortcuts.read().clone();
-                if let Err(e) = shortcuts::register_all(app.handle(), &cfg.toggle, &cfg.cancel) {
+                if let Err(e) = shortcuts::register_all(app.handle(), &cfg) {
                     log::error!("failed to register global shortcuts: {}", e);
                 }
 
@@ -1525,6 +1530,7 @@ pub fn run() {
                 // no longer eats clicks that land near (but not on) the gadget.
                 spawn_gadget_cursor_watcher_safe(app.handle().clone(), state.clone());
                 spawn_gadget_focus_monitor_watcher(app.handle().clone(), state.clone());
+                updates::spawn(app.handle().clone(), state.clone());
                 spawn_gadget_z_order_guardian(app.handle().clone(), state.clone());
 
                 // If not launched via autostart, show the main window.
@@ -1570,7 +1576,6 @@ pub fn run() {
             commands::evaluate_pronunciation,
             commands::toggle_recording_state,
             commands::cancel_recording,
-            commands::get_recording_state,
             commands::get_recording_status,
             commands::get_recording_elapsed,
             commands::get_local_diagnostics,
@@ -1578,7 +1583,6 @@ pub fn run() {
             commands::retry_recovery_audio,
             commands::export_local_data,
             commands::import_local_data,
-            commands::get_history,
             commands::get_history_page,
             commands::get_history_detail,
             commands::restore_history_entry,
@@ -1590,19 +1594,12 @@ pub fn run() {
             commands::clear_history,
             commands::delete_history_entry,
             commands::update_history_text,
-            commands::save_system_prompt,
-            commands::get_system_prompt,
-            commands::get_custom_words,
-            commands::set_custom_words,
             commands::get_vocabulary,
             commands::set_vocabulary,
-            commands::get_compact_mode,
-            commands::set_compact_mode,
             commands::get_widget_preferences,
             commands::set_widget_visibility_mode,
             commands::set_gadget_visual_state,
             commands::acknowledge_gadget_rendered,
-            commands::set_gadget_hit_rect,
             commands::get_shortcuts,
             commands::set_shortcuts,
             commands::list_audio_devices,
@@ -1624,11 +1621,17 @@ pub fn run() {
             commands::get_scratchpad_notes,
             commands::delete_scratchpad_note,
             commands::get_snippets,
+            commands::check_for_update,
+            commands::install_update,
+            commands::get_feature_settings,
+            commands::set_feature_settings,
+            commands::get_local_model_status,
+            commands::download_local_model,
+            commands::remove_local_model,
             commands::set_snippets,
             commands::get_vocabulary_suggestions,
             commands::resolve_vocabulary_suggestion,
             commands::get_insights,
-            commands::get_insights_backfill_status,
             commands::set_insights_backfill_paused,
             commands::set_ai_voice_profile_enabled,
             commands::generate_ai_voice_profile,

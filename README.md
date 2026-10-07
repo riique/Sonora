@@ -39,8 +39,31 @@ A janela principal é o estúdio onde você revisa gravações e ajusta o equipa
 |:--|:--|
 | <kbd>Ctrl</kbd> + <kbd>B</kbd> | Inicia e encerra a gravação, de qualquer aplicativo |
 | <kbd>Ctrl</kbd> + <kbd>Q</kbd> | Cancela sem gerar texto novo |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> | Comando de voz sobre o texto selecionado |
 
-Os dois atalhos podem ser reconfigurados na tela **Atalhos**.
+Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá para escolher entre apertar ou segurar para falar.
+
+<br>
+
+## Novidades desta versão
+
+- **Refinar com IA no Ultrarrápido:** uma passada rápida de IA aplica vocabulário, estilo do aplicativo e contexto autorizado ao texto do Whisper. Pode ser desligada em Ajustes › Transcrição.
+- **Comando de voz (`Ctrl+Shift+B`):** selecione um texto, aperte o atalho e diga o que fazer (“deixa mais formal”, “traduz para inglês”). Sem seleção, o Sonora escreve o que você pedir.
+- **Segurar para falar:** em Ajustes › Geral › Atalhos, escolha entre apertar para alternar ou segurar enquanto fala.
+- **Snippets no meio da frase:** “meu perfil é snippet meu github” expande só o trecho do snippet.
+- **Vocabulário que aprende:** ao corrigir a mesma palavra duas vezes no Histórico, o Sonora oferece guardá-la.
+- **Histórico explica o que aconteceu:** cada ditado mostra o que foi aplicado (IA, vocabulário, style, snippet, offline) e o custo; o topo mostra o total do mês.
+- **Sem internet:** com o modelo local baixado (whisper.cpp), o ditado é transcrito no computador quando todos os provedores falham.
+- **Atualização automática:** novas versões publicadas no GitHub são instaladas ao abrir o app.
+- **Removido:** o caminho legado de motores (Deepgram e motor duplo), que não era mais executado.
+
+### Publicar uma versão (atualização automática)
+
+1. Uma única vez: em *Settings › Secrets and variables › Actions* do repositório, crie `TAURI_SIGNING_PRIVATE_KEY` (conteúdo da chave privada do updater) e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave pública correspondente está em `src-tauri/tauri.conf.json`.
+2. Suba a versão em `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e no topo deste README.
+3. Crie e envie a tag: `git tag v2.1.0 && git push origin v2.1.0`.
+
+O workflow **Release** gera o instalador assinado e o `latest.json`; as instalações existentes encontram a versão nova sozinhas.
 
 <br>
 
@@ -145,7 +168,7 @@ No Ultrarrápido, escolha entre `openai/whisper-large-v3-turbo` e `openai/whispe
 |:--|:--|
 | **OpenRouter** | Obrigatório no Ultrarrápido; também aceita modelos multimodais com áudio e modelos dedicados de transcrição |
 | **Google Gemini** | Rápido e preciso, Preciso, Ultrapreciso e avaliação de pronúncia |
-| **Groq** | Preciso, Ultrapreciso, sanitizer e fallbacks legados |
+| **Groq** | Preciso, Ultrapreciso, sanitizer e fallback manual |
 
 ### Desenvolvimento
 
@@ -240,7 +263,7 @@ src/views/
 | Interface | React 18 · TypeScript · Vite 5 · Tailwind CSS 3 |
 | Backend | Rust: captura, STT, IPC e sistema operacional |
 | Áudio | cpal (WASAPI no Windows) |
-| STT e LLM | Groq Whisper · Google Gemini · OpenRouter · Deepgram (legado) |
+| STT e LLM | Groq Whisper · Google Gemini · OpenRouter · whisper.cpp local (offline) |
 | Clipboard e paste | arboard · enigo |
 
 <br>

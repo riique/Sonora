@@ -233,6 +233,28 @@ pub fn ensure_default_product_terms(mut terms: Vec<VocabularyTerm>) -> Vec<Vocab
 }
 
 /// Format glossary block for LLM prompts (sanitizer / Gemini).
+/// Short spelling hint for Whisper-style STT `prompt` fields. Whisper only reads the
+/// tail (~224 tokens) of the prompt, so the list is capped and strict terms go first.
+pub fn whisper_prompt_hint(terms: &[VocabularyTerm]) -> Option<String> {
+    const MAX_CHARS: usize = 600;
+    let mut ordered = terms
+        .iter()
+        .filter(|term| term.enabled && !term.canonical.trim().is_empty())
+        .collect::<Vec<_>>();
+    ordered.sort_by_key(|term| !term.strict);
+    let mut hint = String::new();
+    for term in ordered {
+        let canonical = term.canonical.trim();
+        let separator = if hint.is_empty() { "" } else { ", " };
+        if hint.chars().count() + separator.len() + canonical.chars().count() > MAX_CHARS {
+            break;
+        }
+        hint.push_str(separator);
+        hint.push_str(canonical);
+    }
+    (!hint.is_empty()).then(|| format!("{hint}."))
+}
+
 pub fn format_glossary_for_prompt(terms: &[VocabularyTerm]) -> String {
     let enabled = enabled_terms(terms);
     if enabled.is_empty() {
@@ -250,15 +272,6 @@ pub fn format_glossary_for_prompt(terms: &[VocabularyTerm]) -> String {
         lines.push(line);
     }
     lines.join("\n")
-}
-
-/// Deepgram keyterms: enabled canonicals (cap length for query string safety).
-pub fn deepgram_keyterms(terms: &[VocabularyTerm], max: usize) -> Vec<String> {
-    enabled_terms(terms)
-        .into_iter()
-        .map(|t| t.canonical.clone())
-        .take(max)
-        .collect()
 }
 
 /// Deterministic post-pass: replace unambiguous aliases with canonical for
@@ -507,6 +520,31 @@ mod tests {
         }];
         let d = detect_strict_corruption("chame useEffect", "chame o efeito", &terms);
         assert_eq!(d, vec!["useEffect"]);
+    }
+
+    #[test]
+    fn whisper_hint_lists_enabled_terms_strict_first_and_is_capped() {
+        let term = |canonical: &str, strict: bool, enabled: bool| VocabularyTerm {
+            canonical: canonical.into(),
+            aliases: Vec::new(),
+            category: VocabularyCategory::default(),
+            strict,
+            enabled,
+        };
+        assert_eq!(
+            whisper_prompt_hint(&[
+                term("Tauri", false, true),
+                term("Sonora", true, true),
+                term("Off", false, false),
+            ])
+            .as_deref(),
+            Some("Sonora, Tauri.")
+        );
+        assert_eq!(whisper_prompt_hint(&[]), None);
+        let many = (0..500)
+            .map(|index| term(&format!("Termo{index}"), false, true))
+            .collect::<Vec<_>>();
+        assert!(whisper_prompt_hint(&many).unwrap().chars().count() <= 601);
     }
 
     #[test]

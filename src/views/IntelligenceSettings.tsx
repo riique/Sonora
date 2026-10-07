@@ -10,6 +10,7 @@ import { Button } from "../components/ui/Button";
 import { Input, Select, Textarea } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
 import { ErrorState, PreferenceRow, RowGroup, Section } from "../components/ui/Surface";
+import { useFeatures } from "../lib/useFeatures";
 
 const sourceLabels: Record<ContextSourceKind, string> = {
   application: "Aplicativo", window_title: "Título da janela", domain: "Domínio",
@@ -41,6 +42,7 @@ const validateSnapshot = ({ context, policy, snippets }: IntelligenceSnapshot) =
 };
 
 export function IntelligenceSettings() {
+  const { features, update: updateFeatures } = useFeatures();
   const [context, setContext] = useState<ContextPreferences | null>(null);
   const [policy, setPolicy] = useState<OutputPolicyConfig | null>(null);
   const [snippets, setSnippetItems] = useState<VoiceSnippet[]>([]);
@@ -185,7 +187,7 @@ export function IntelligenceSettings() {
 
       <Section
         title="Snippets por voz"
-        description="Diga o gatilho e o Sonora insere o texto completo. Correspondência exata e local."
+        description={<>Diga o gatilho sozinho, ou “snippet” seguido do gatilho no meio de uma frase, e o Sonora insere o texto completo. Ex.: “meu perfil é <span className="font-medium text-ink">snippet meu github</span>”.</>}
         action={<Button size="sm" onClick={() => setSnippetItems([...snippets, { id: `snippet-${Date.now()}`, trigger: "", expansion: "", enabled: true, require_activation_phrase: true }])}><Plus className="h-3.5 w-3.5" aria-hidden />Novo snippet</Button>}
       >
         {snippets.length === 0 ? <p className="border-y border-line py-4 text-[13px] text-muted">Nenhum snippet ainda.</p> : (
@@ -207,9 +209,14 @@ export function IntelligenceSettings() {
         )}
       </Section>
 
-      {suggestions.length > 0 && (
-        <Section title="Sugestões de vocabulário" description="Correções que você fez três vezes ou mais.">
-          <div className="hairline-list border-y border-line">
+      <Section title="Aprender com suas correções" description="Quando você corrige a mesma palavra no Histórico duas vezes, o Sonora oferece guardá-la no vocabulário.">
+        <RowGroup>
+          <PreferenceRow title="Sugerir na hora" description="Mostra um aviso logo após a segunda correção. Desligado, as sugestões ficam só aqui.">
+            <Toggle label="Sugerir vocabulário na hora" checked={features?.learning_prompts ?? true} disabled={!features} onChange={(learning_prompts) => void updateFeatures({ learning_prompts })} />
+          </PreferenceRow>
+        </RowGroup>
+        {suggestions.length > 0 && (
+          <div className="hairline-list mt-4 border-y border-line">
             {suggestions.map((event) => (
               <div key={event.id} className="flex items-center justify-between gap-5 py-3">
                 <p className="text-[13px] text-ink"><span className="text-muted line-through decoration-line-strong">{event.before}</span> → <span className="font-medium">{event.after}</span><span className="timecode ml-2">{event.count}×</span></p>
@@ -220,8 +227,8 @@ export function IntelligenceSettings() {
               </div>
             ))}
           </div>
-        </Section>
-      )}
+        )}
+      </Section>
 
       <Section title="Contexto e privacidade" description="O Sonora pode usar o que está ao redor do cursor para acertar termos. Metadados ficam no computador; texto da tela só vai à nuvem com permissão geral e por fonte.">
         <RowGroup>

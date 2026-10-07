@@ -1,3 +1,4 @@
+import { appliedSummary, entryCostUsd, formatUsd } from "../lib/applied";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -249,6 +250,7 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
+  const [month, setMonth] = useState<{ count: number; cost: number | null }>({ count: 0, cost: null });
   const generation = useRef(0);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<HistoryEntry[]>([]);
@@ -295,6 +297,7 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
       if (request !== generation.current) return;
       setItems(page.items);
       setTotal(page.total);
+      setMonth({ count: page.month_dictations ?? 0, cost: page.month_cost_usd ?? null });
       setErrors((current) => ({ ...current, load: "" }));
     } catch (error) {
       setErrors((current) => ({ ...current, load: `Não foi possível carregar o histórico: ${String(error)}` }));
@@ -476,6 +479,12 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
     <div>
       <PageHeader
         title="Histórico"
+        description={tab === "ditados" && month.count > 0 && (
+          <span className="tabular-nums">
+            Este mês: {month.count.toLocaleString("pt-BR")} {month.count === 1 ? "ditado" : "ditados"}
+            {month.cost != null && <> · {formatUsd(month.cost)} em provedores</>}
+          </span>
+        )}
         action={tab === "ditados" && (
           <>
             <Button variant={uploadOpen ? "primary" : "secondary"} onClick={() => setUploadOpen((open) => !open)} aria-expanded={uploadOpen}>
@@ -553,6 +562,8 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
                       const isBusy = busyId === entry.id;
                       const isPlaying = playingId === entry.id;
                       const latestRun = entry.pipeline_runs?.[entry.pipeline_runs.length - 1];
+                      const applied = appliedSummary(entry);
+                      const cost = entryCostUsd(entry);
                       const date = parseEntryDate(entry.date);
                       return (
                         <li key={entry.id} className="group relative py-4">
@@ -582,11 +593,21 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
                               ) : (
                                 <>
                                   <p className="line-clamp-3 text-[13.5px] leading-[1.6] text-ink">{entry.text}</p>
-                                  <p className="mt-1.5 text-[11.5px] text-muted">
+                                  <p className="mt-1.5 text-[11.5px] text-muted tabular-nums">
                                     {entry.words} palavras · {productModeLabel(entry.mode) || entry.engine}
-                                    {entry.used_fallback && <span className="text-standby"> · com fallback</span>}
+                                    {cost != null && <> · {formatUsd(cost)}</>}
                                     {devMode && entry.model && <span className="font-mono"> · {entry.model}</span>}
                                   </p>
+                                  {applied.length > 0 && (
+                                    <ul className="applied-list" aria-label="O que foi aplicado">
+                                      {applied.map((item) => (
+                                        <li key={item.label} className={item.tone === "caution" ? "applied-item applied-item--caution" : "applied-item"}>
+                                          {item.label}
+                                          {item.detail && <span className="applied-detail">{item.detail}</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </>
                               )}
                             </div>

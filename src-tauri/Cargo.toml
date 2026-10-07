@@ -20,8 +20,6 @@ tauri-plugin-dialog = "2"
 cpal = "0.15"
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
-futures-util = "0.3"
 arboard = "3.4"
 enigo = "0.3"
 serde = { version = "1", features = ["derive"] }
@@ -31,6 +29,8 @@ thiserror = "2"
 log = "0.4"
 env_logger = "0.11"
 base64 = "0.22"
+whisper-rs = "0.16"
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
