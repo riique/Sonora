@@ -317,9 +317,11 @@ pub fn spawn_supervisor(state: Arc<AppState>) {
                             default_changed
                         }
                     });
-                    reason
-                        .filter(|_| state.recording_status().phase == RecordingPhase::Idle)
-                        .and_then(|reason| slot.take().map(|stream| (stream, reason)))
+                    let idle = state.recording_status().phase == RecordingPhase::Idle;
+                    match (reason, idle) {
+                        (Some(reason), true) => slot.take().map(|stream| (stream, reason)),
+                        _ => None,
+                    }
                 };
                 if let Some((stream, reason)) = retired {
                     retire(&state, stream, reason);
