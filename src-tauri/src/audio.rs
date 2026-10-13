@@ -186,20 +186,71 @@ pub fn create_wav_buffer(samples: &[i16]) -> Vec<u8> {
     buffer
 }
 
-/// Acquires the default input device and opens a capture stream at the
-/// device's **native** sample rate and channel count. Forcing a non-native
-/// config (e.g. 16 kHz mono) on Windows WASAPI shared mode silently fails
-/// or returns an error, which was the root cause of transcription never
-/// working. Samples are down-mixed to mono `i16` inside the data callback
-/// and the native rate is stored in `state.capture_rate` so `stop_capture`
-/// can resample to 16 kHz when building the final WAV.
+/// Starts capture for a recording and returns the health of the stream that
+/// feeds it.
+///
+/// When a ready stream is open (see [`crate::mic_ready`]) the recording begins
+/// with the audio captured just before `requested_at`, so words spoken together
+/// with the shortcut survive. Otherwise the device is opened now, as before.
+/// Context capture happens only after audio is already flowing.
 pub fn start_capture(
     state: &Arc<AppState>,
     generation: u64,
     session_id: &str,
-) -> Result<(), AudioError> {
+    requested_at: std::time::Instant,
+) -> Result<Arc<crate::mic_ready::StreamHealth>, AudioError> {
     state.clear_audio_buffer();
+    *state.capture_fault.lock() = None;
     let started_at_ms = crate::pipeline_run::epoch_ms();
+    let configured_device = crate::settings::load_input_device();
+    let directory = crate::audio_store::default_directory()
+        .ok_or_else(|| AudioError::DeviceOpen("Armazenamento de recuperação indisponível".into()))?
+        .join("recovery");
+    let open_spool =
+        |rate| crate::capture_spool::CaptureSpool::start(directory.clone(), session_id, rate);
+
+    let (fresh_stream, health) = match crate::mic_ready::attach_ready_stream(
+        state,
+        &configured_device,
+        requested_at,
+        open_spool,
+    ) {
+        Some(Ok(ready)) => {
+            log::info!(
+                "audio: using ready microphone ({} Hz, pre-roll {} ms)",
+                ready.rate,
+                ready.preroll_ms
+            );
+            (None, ready.health)
+        }
+        Some(Err(error)) => return Err(AudioError::DeviceOpen(error)),
+        None => {
+            // Replace any unusable ready stream (dead, or another device).
+            let stale = state.audio_stream.lock().take();
+            drop(stale);
+            let stream = open_input_stream(state, configured_device)?;
+            *state.capture_rate.write() = stream.rate;
+            *state.capture_spool.lock() = Some(
+                crate::capture_spool::CaptureSpool::start(
+                    directory.clone(),
+                    session_id,
+                    stream.rate,
+                )
+                .map_err(AudioError::DeviceOpen)?,
+            );
+            state.preroll.lock().clear();
+            state
+                .capture_owner
+                .store(stream.health.id, Ordering::Release);
+            stream
+                .stream
+                .play()
+                .map_err(|e| AudioError::StreamPlay(e.to_string()))?;
+            let health = stream.health.clone();
+            (Some(stream), health)
+        }
+    };
+
     let context_preferences = state.context_preferences.read().clone();
     let context = crate::context::capture(&context_preferences);
     let global_formatting_level = *state.formatting_level.read();
@@ -224,8 +275,27 @@ pub fn start_capture(
         destination,
     };
 
+    if !state.install_recording_capture(generation, fresh_stream, pending_session) {
+        return Err(AudioError::Superseded);
+    }
+
+    // Keep capture local until the silence check at stop. The legacy streaming
+    // transport opens only after audio has been admitted.
+
+    Ok(health)
+}
+
+/// Builds (without starting) an input stream on the configured device, or the
+/// Windows default, at the device's **native** sample rate and channel count.
+/// Forcing a non-native config (e.g. 16 kHz mono) on Windows WASAPI shared mode
+/// silently fails or returns an error, which was the root cause of
+/// transcription never working. Samples are down-mixed to mono `i16` inside the
+/// data callback and resampled to 16 kHz when the final WAV is built.
+pub fn open_input_stream(
+    state: &Arc<AppState>,
+    configured_device: Option<String>,
+) -> Result<crate::mic_ready::InputStream, AudioError> {
     let host = cpal::default_host();
-    let configured_device = crate::settings::load_input_device();
     let device = if let Some(ref name) = configured_device {
         let mut found = None;
         if let Ok(mut devices) = host.input_devices() {
@@ -239,11 +309,9 @@ pub fn start_capture(
     };
 
     let device = device.ok_or(AudioError::NoInputDevice)?;
+    let device_name = device.name().unwrap_or_else(|_| "<unknown>".into());
 
-    log::info!(
-        "audio: opened input device {:?}",
-        device.name().unwrap_or_else(|_| "<unknown>".into())
-    );
+    log::info!("audio: opened input device {:?}", device_name);
 
     let supported = device
         .default_input_config()
@@ -260,26 +328,22 @@ pub fn start_capture(
         sample_format
     );
 
-    // Persist so the WAV resampler knows the source rate later.
-    *state.capture_rate.write() = native_rate;
-
     // Use the device's own config — no forced rate or channel count.
     let config: StreamConfig = supported.into();
+    let health = Arc::new(crate::mic_ready::StreamHealth::new());
 
-    let directory = crate::audio_store::default_directory()
-        .ok_or_else(|| AudioError::DeviceOpen("Armazenamento de recuperação indisponível".into()))?
-        .join("recovery");
-    *state.capture_spool.lock() = Some(
-        crate::capture_spool::CaptureSpool::start(directory, session_id, native_rate)
-            .map_err(AudioError::DeviceOpen)?,
-    );
-    *state.capture_fault.lock() = None;
     let error_state = state.clone();
+    let error_health = health.clone();
     let err_callback = move |_err: cpal::StreamError| {
-        *error_state.capture_fault.lock() = Some(
-            "O microfone foi desconectado ou o driver falhou. O áudio parcial foi preservado."
-                .into(),
-        );
+        error_health.mark_fault();
+        let recording = error_state.capture_owner.load(Ordering::Acquire) == error_health.id
+            && error_state.capture_spool.lock().is_some();
+        if recording {
+            *error_state.capture_fault.lock() = Some(
+                "O microfone foi desconectado ou o driver falhou. O áudio parcial foi preservado."
+                    .into(),
+            );
+        }
     };
 
     let ch = native_channels as usize;
@@ -287,18 +351,15 @@ pub fn start_capture(
     let stream: Stream = match sample_format {
         SampleFormat::I16 => {
             let st = state.clone();
+            let health = health.clone();
             device
                 .build_input_stream(
                     &config,
                     move |samples: &[i16], _: &cpal::InputCallbackInfo| {
-                        if !st.is_recording() {
-                            return;
-                        }
                         let mono = downmix_i16(samples, ch);
-                        // Never discard a capture block. The stream is stopped
-                        // before the buffer is drained, and the level meter only
-                        // holds this lock long enough to copy a small window.
-                        record_capture_block(&st, &mono);
+                        // Never discard a capture block. The level meter only
+                        // holds its lock long enough to copy a small window.
+                        crate::mic_ready::route_block(&st, &health, native_rate, &mono);
                     },
                     err_callback,
                     None,
@@ -307,15 +368,13 @@ pub fn start_capture(
         }
         SampleFormat::F32 => {
             let st = state.clone();
+            let health = health.clone();
             device
                 .build_input_stream(
                     &config,
                     move |samples: &[f32], _: &cpal::InputCallbackInfo| {
-                        if !st.is_recording() {
-                            return;
-                        }
                         let mono = downmix_f32(samples, ch);
-                        record_capture_block(&st, &mono);
+                        crate::mic_ready::route_block(&st, &health, native_rate, &mono);
                     },
                     err_callback,
                     None,
@@ -327,18 +386,14 @@ pub fn start_capture(
         }
     };
 
-    stream
-        .play()
-        .map_err(|e| AudioError::StreamPlay(e.to_string()))?;
-
-    state
-        .install_recording_capture(generation, stream, pending_session)
-        .map_err(|_| AudioError::Superseded)?;
-
-    // Keep capture local until the silence check at stop. The legacy streaming
-    // transport opens only after audio has been admitted.
-
-    Ok(())
+    Ok(crate::mic_ready::InputStream {
+        stream,
+        configured_device,
+        device_name,
+        rate: native_rate,
+        health,
+        last_used: std::time::Instant::now(),
+    })
 }
 
 fn downmix_i16(samples: &[i16], ch: usize) -> Vec<i16> {
@@ -400,9 +455,11 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
     }
     let _recording_session_guard = RecordingSessionGuard(state.clone());
     let voice_command = state.command_request.lock().take();
-    let _ = state.drop_audio_stream();
 
+    // Detaching the spool ends the recording; a ready stream goes back to
+    // filling the pre-roll.
     let spool = state.capture_spool.lock().take();
+    crate::mic_ready::release_after_capture(state);
     let mut captured_path = None;
     let raw_samples = if let Some(spool) = spool {
         match spool.finish().and_then(|path| {
@@ -1396,12 +1453,12 @@ pub(crate) fn now_timestamp() -> String {
     }
 }
 
-/// Hard-stops the active stream and discards every accumulated sample
-/// without building a WAV buffer. Used by the panic shortcut.
+/// Discards the recording without building a WAV buffer and releases (or
+/// keeps ready) the input stream. Used by the panic shortcut.
 pub fn cancel_capture(state: &Arc<AppState>) {
-    let _ = state.drop_audio_stream();
-    state.clear_audio_buffer();
     state.capture_spool.lock().take();
+    crate::mic_ready::release_after_capture(state);
+    state.clear_audio_buffer();
     state.recording_session.lock().take();
     state.command_request.lock().take();
     log::info!("audio: capture cancelled, buffers released");
@@ -1601,12 +1658,9 @@ fn persist_and_notify(state: &Arc<AppState>, entry: &crate::models::HistoryEntry
     }
 }
 
-fn record_capture_block(state: &Arc<AppState>, samples: &[i16]) {
-    if let Some(spool) = state.capture_spool.lock().as_ref() {
-        if let Err(error) = spool.push(samples) {
-            *state.capture_fault.lock() = Some(error);
-        }
-    }
+/// Keeps the newest samples of the active recording for the gadget's level
+/// meter.
+pub(crate) fn record_meter_block(state: &AppState, samples: &[i16]) {
     let mut meter = state.audio_buffer.lock();
     let keep = 16_384usize;
     if samples.len() >= keep {

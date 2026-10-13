@@ -31,6 +31,7 @@ import {
   type GeminiProvider,
   type GeminiPipelineChoice,
   type GeminiPipelineConfig,
+  type MicReadyMode,
   type OpenRouterWhisperModel,
   type UltraFastProvider,
   type VocabularyTerm,
@@ -58,6 +59,12 @@ const TABS: { key: SettingsTab; label: string; description: string }[] = [
   { key: "inteligencia", label: "Saída e contexto", description: "Formatação, destino, styles, snippets e privacidade." },
   { key: "dados", label: "Dados e recuperação", description: "Verificação, itens removidos, backup e diagnóstico." },
 ];
+
+const MIC_READY_HINTS: Record<MicReadyMode, string> = {
+  off: "O microfone só abre ao gravar. Alguns headsets sem fio cortam as primeiras palavras.",
+  after_use: "Fica aberto por 10 minutos depois de cada ditado, para não perder o começo da fala.",
+  always: "Fica aberto enquanto o Sonora estiver rodando. O Windows mostra o microfone em uso.",
+};
 
 function displayWindowsPath(path: string): string {
   if (path.startsWith("\\\\?\\UNC\\")) return `\\\\${path.slice(8)}`;
@@ -124,6 +131,8 @@ function GeralTab() {
   const [defaultAudioDirectory, setDefaultAudioDirectory] = useState("");
   const [customAudioDirectory, setCustomAudioDirectory] = useState(false);
   const [audioDirectoryStatus, setAudioDirectoryStatus] = useState("");
+  const { features, update: updateFeatures, error: featuresError } = useFeatures();
+  const micReady = features?.mic_ready ?? "after_use";
 
   useEffect(() => {
     invoke<boolean>("get_autostart").then(setStartup).catch((e) => console.error("get_autostart failed:", e));
@@ -200,6 +209,14 @@ function GeralTab() {
               <option value="default">Padrão do Windows</option>
               {devices.map((device) => <option key={device} value={device}>{device}</option>)}
             </Select>
+          </PreferenceRow>
+          <PreferenceRow title="Manter microfone pronto" description={featuresError || MIC_READY_HINTS[micReady]}>
+            <Segmented<MicReadyMode>
+              label="Manter microfone pronto"
+              value={micReady}
+              onChange={(next) => void updateFeatures({ mic_ready: next })}
+              options={[{ value: "off", label: "Desligado" }, { value: "after_use", label: "Após uso" }, { value: "always", label: "Sempre" }]}
+            />
           </PreferenceRow>
           <div className="py-4">
             <div className="flex items-center justify-between gap-10">

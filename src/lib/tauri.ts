@@ -150,6 +150,9 @@ export async function setShortcuts(config: ShortcutConfig): Promise<ShortcutConf
 
 export type LocalModel = "base" | "small";
 
+/** How long the microphone stays open between dictations. */
+export type MicReadyMode = "off" | "after_use" | "always";
+
 export interface FeatureSettings {
   /** Ultrarrápido: quick AI pass applying vocabulary, style and context. */
   quick_refine: boolean;
@@ -160,6 +163,8 @@ export interface FeatureSettings {
   offline_model: LocalModel;
   /** Install new GitHub releases automatically. */
   auto_update: boolean;
+  /** Keep the microphone open so the first words are not lost. */
+  mic_ready: MicReadyMode;
 }
 
 export interface LocalModelStatus {

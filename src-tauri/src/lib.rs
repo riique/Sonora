@@ -15,6 +15,7 @@ pub mod local_whisper;
 pub mod maintenance;
 pub mod meta_asr;
 pub mod mic_control;
+pub mod mic_ready;
 pub mod models;
 pub mod native_messaging;
 pub mod openrouter;
@@ -1531,6 +1532,7 @@ pub fn run() {
                 spawn_gadget_cursor_watcher_safe(app.handle().clone(), state.clone());
                 spawn_gadget_focus_monitor_watcher(app.handle().clone(), state.clone());
                 updates::spawn(app.handle().clone(), state.clone());
+                mic_ready::spawn_supervisor(state.clone());
                 spawn_gadget_z_order_guardian(app.handle().clone(), state.clone());
 
                 // If not launched via autostart, show the main window.

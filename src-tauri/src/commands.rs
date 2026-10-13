@@ -1191,10 +1191,15 @@ pub async fn get_input_device() -> Option<String> {
 ///
 /// Saves the user's manual input device selection to settings.
 #[tauri::command]
-pub async fn set_input_device(device: Option<String>) -> Result<(), CommandError> {
+pub async fn set_input_device(
+    state: State<'_, SharedState>,
+    device: Option<String>,
+) -> Result<(), CommandError> {
     log::info!("set_input_device: {:?}", device);
+    let shared = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         crate::settings::save_input_device(device).map_err(CommandError::Internal)?;
+        crate::mic_ready::invalidate(&shared);
         Ok(())
     })
     .await

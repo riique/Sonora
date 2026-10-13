@@ -61,6 +61,41 @@ pub fn save_store(cfg: &ShortcutConfig) -> Result<(), String> {
     crate::storage::write_json(file, cfg)
 }
 
+/// Waits until the stream has delivered real (non-zero) audio, so the gadget
+/// only shows the recording cue once speech is actually captured. Wireless
+/// headsets output exact silence while their mic path wakes up. Bounded by
+/// [`crate::mic_ready::SIGNAL_WAIT`] because a hardware noise gate also outputs
+/// zeros in a quiet room, and abandoned as soon as the user stops or cancels.
+fn wait_for_first_signal(
+    state: &SharedState,
+    generation: u64,
+    health: &crate::mic_ready::StreamHealth,
+) {
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(signal_ms) = health.first_signal_ms() {
+            log::info!(
+                "capture: audio signal after {}ms of stream life (waited {}ms)",
+                signal_ms,
+                started.elapsed().as_millis()
+            );
+            return;
+        }
+        let status = state.recording_status();
+        if status.generation != generation || status.phase != RecordingPhase::Starting {
+            return;
+        }
+        if started.elapsed() >= crate::mic_ready::SIGNAL_WAIT {
+            log::info!(
+                "capture: no audio signal after {}ms; showing recording cue anyway",
+                started.elapsed().as_millis()
+            );
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 /// Core toggle logic shared by the IPC command path and the global
 /// `<Ctrl+B>` shortcut handler.
 ///
@@ -102,11 +137,15 @@ pub fn handle_toggle(app: &AppHandle, state: &SharedState) -> bool {
                 let start_requested_at = std::time::Instant::now();
 
                 // Respect the endpoint mute chosen by the user.
-                let capture_result = start_capture(&state_bg, generation, &session_id);
+                let capture_result =
+                    start_capture(&state_bg, generation, &session_id, start_requested_at);
                 let was_muted = false;
 
                 match capture_result {
-                    Ok(()) => {
+                    Ok(health) => {
+                        // The cue must mean "your voice is being captured":
+                        // stay in `Starting` until the device delivers audio.
+                        wait_for_first_signal(&state_bg, generation, &health);
                         let Some((accepted, ready_status)) =
                             state_bg.recording_capture_ready(generation)
                         else {
@@ -121,6 +160,23 @@ pub fn handle_toggle(app: &AppHandle, state: &SharedState) -> bool {
                                 "shortcut: capture became ready after stop/cancel generation={}; stop path owns cleanup",
                                 generation
                             );
+                            // A cancel during start could not finish while the
+                            // start worker was pending; complete it now.
+                            if ready_status.phase == RecordingPhase::Cancelling {
+                                let idle = state_bg.finish_recording_cancel(generation);
+                                if idle.phase == RecordingPhase::Idle {
+                                    state_bg.capture_lease.lock().take();
+                                    if let Err(error) =
+                                        app_bg.emit(event_names::RECORDING_IDLE, &idle)
+                                    {
+                                        log::warn!(
+                                            "failed to emit {}: {}",
+                                            event_names::RECORDING_IDLE,
+                                            error
+                                        );
+                                    }
+                                }
+                            }
                             return;
                         }
 
