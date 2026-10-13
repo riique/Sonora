@@ -30,6 +30,10 @@ pub struct FeatureSettings {
     /// Check GitHub Releases on startup and install updates automatically.
     #[serde(default = "default_true")]
     pub auto_update: bool,
+    /// Keep the microphone open between dictations so the first words are
+    /// not lost while the device wakes up.
+    #[serde(default)]
+    pub mic_ready: crate::mic_ready::MicReadyMode,
 }
 
 fn default_true() -> bool {
@@ -44,6 +48,7 @@ impl Default for FeatureSettings {
             offline_fallback: true,
             offline_model: crate::local_whisper::LocalModel::default(),
             auto_update: true,
+            mic_ready: crate::mic_ready::MicReadyMode::default(),
         }
     }
 }

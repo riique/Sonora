@@ -576,7 +576,13 @@ pub struct AppState {
     pub operations: Arc<crate::operations::Coordinator>,
     pub capture_lease: Mutex<Option<crate::operations::Lease>>,
     pub api_keys: RwLock<ApiKeys>,
-    pub audio_stream: Mutex<Option<Stream>>,
+    /// Open input stream, both while recording and while kept ready between
+    /// dictations (see [`crate::mic_ready`]).
+    pub audio_stream: Mutex<Option<crate::mic_ready::InputStream>>,
+    /// Id of the stream allowed to write into the spool or pre-roll.
+    pub capture_owner: std::sync::atomic::AtomicU64,
+    /// Recent audio from the ready stream, prepended to the next dictation.
+    pub preroll: Mutex<std::collections::VecDeque<i16>>,
     pub audio_buffer: Mutex<Vec<i16>>,
     pub capture_spool: Mutex<Option<crate::capture_spool::CaptureSpool>>,
     pub capture_fault: Mutex<Option<String>>,
@@ -680,6 +686,8 @@ impl AppState {
             capture_lease: Mutex::new(None),
             api_keys: RwLock::new(ApiKeys::default()),
             audio_stream: Mutex::new(None),
+            capture_owner: std::sync::atomic::AtomicU64::new(0),
+            preroll: Mutex::new(std::collections::VecDeque::new()),
             audio_buffer: Mutex::new(Vec::new()),
             capture_spool: Mutex::new(None),
             capture_fault: Mutex::new(None),
@@ -837,19 +845,26 @@ impl AppState {
         self.recording_lifecycle.lock().snapshot()
     }
 
+    /// Binds the session to the starting recording. `stream` is a freshly
+    /// opened stream, or `None` when a ready stream is already in the slot.
+    /// Returns `false` (dropping a fresh stream) when the start was superseded.
+    /// Lock order is stream slot, then lifecycle (as in [`crate::mic_ready`]).
     pub(crate) fn install_recording_capture(
         &self,
         generation: u64,
-        stream: Stream,
+        stream: Option<crate::mic_ready::InputStream>,
         session: crate::pipeline_run::RecordingSession,
-    ) -> Result<(), Box<(Stream, crate::pipeline_run::RecordingSession)>> {
+    ) -> bool {
+        let mut slot = self.audio_stream.lock();
         let lifecycle = self.recording_lifecycle.lock();
         if lifecycle.generation != generation || lifecycle.phase != RecordingPhase::Starting {
-            return Err(Box::new((stream, session)));
+            return false;
         }
-        *self.audio_stream.lock() = Some(stream);
+        if let Some(stream) = stream {
+            *slot = Some(stream);
+        }
         *self.recording_session.lock() = Some(session);
-        Ok(())
+        true
     }
 
     pub(crate) fn recording_capture_ready(
@@ -974,13 +989,6 @@ impl AppState {
         // so amplify aggressively for the gadget waveform. Tuned so normal
         // talking near the mic reliably pushes the meter into the upper range.
         ((rms * 7.5) as f32).clamp(0.0, 1.0)
-    }
-
-    /// Stops and drops the active input stream (if any), releasing
-    /// the microphone hardware immediately. Returns `true` if a
-    /// stream was actually dropped.
-    pub fn drop_audio_stream(&self) -> bool {
-        self.audio_stream.lock().take().is_some()
     }
 }
 
