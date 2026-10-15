@@ -986,6 +986,46 @@ pub async fn set_dev_mode(value: bool) -> Result<(), CommandError> {
     .map_err(|e| CommandError::Internal(e.to_string()))?
 }
 
+/// `get_run_as_admin`
+///
+/// Returns the persisted preference and whether this process is elevated.
+#[tauri::command]
+pub async fn get_run_as_admin() -> Result<RunAsAdminStatus, CommandError> {
+    tokio::task::spawn_blocking(|| RunAsAdminStatus {
+        enabled: crate::settings::load_run_as_admin(),
+        elevated: crate::elevation::current_process_elevated(),
+    })
+    .await
+    .map_err(|e| CommandError::Internal(e.to_string()))
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RunAsAdminStatus {
+    pub enabled: bool,
+    pub elevated: bool,
+}
+
+/// `set_run_as_admin`
+///
+/// Persists the preference. Enabling it while not elevated restarts Sonora
+/// through the UAC prompt; if the prompt is dismissed the app keeps running.
+#[tauri::command]
+pub async fn set_run_as_admin(value: bool) -> Result<(), CommandError> {
+    log::info!("set_run_as_admin: {}", value);
+    tokio::task::spawn_blocking(move || {
+        crate::settings::save_run_as_admin(value).map_err(CommandError::Internal)?;
+        if value && !crate::elevation::current_process_elevated() {
+            if let Err(error) = crate::elevation::restart_elevated() {
+                let _ = crate::settings::save_run_as_admin(false);
+                return Err(CommandError::Internal(error));
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| CommandError::Internal(e.to_string()))?
+}
+
 #[tauri::command]
 pub fn get_context_preferences(
     state: State<'_, SharedState>,

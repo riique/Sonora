@@ -5,6 +5,7 @@ pub mod audio_store;
 pub mod capture_spool;
 pub mod commands;
 pub mod context;
+pub mod elevation;
 pub mod gemini;
 pub mod groq;
 pub mod history;
@@ -1464,6 +1465,14 @@ pub fn run() {
 
                         // Lightweight UI preferences (gadget compact mode).
                         settings::init(dir.join("settings.json"));
+                        if settings::load_run_as_admin()
+                            && !elevation::current_process_elevated()
+                            && !std::env::args().any(|arg| arg == elevation::ELEVATED_RELAUNCH_ARG)
+                        {
+                            if let Err(error) = elevation::restart_elevated() {
+                                log::warn!("elevation: staying non-elevated: {error}");
+                            }
+                        }
                         context::init(dir.clone());
                         scratchpad::init(dir.clone());
                         snippets::init(dir.clone());
@@ -1616,6 +1625,8 @@ pub fn run() {
             commands::set_autostart,
             commands::get_dev_mode,
             commands::set_dev_mode,
+            commands::get_run_as_admin,
+            commands::set_run_as_admin,
             commands::get_context_preferences,
             commands::set_context_preferences,
             commands::get_output_policy_config,

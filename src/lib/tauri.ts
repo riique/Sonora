@@ -558,6 +558,21 @@ export async function setDevMode(value: boolean): Promise<void> {
   await invoke<void>("set_dev_mode", { value });
 }
 
+export interface RunAsAdminStatus {
+  enabled: boolean;
+  elevated: boolean;
+}
+
+/** Returns the run-as-administrator preference and current elevation. */
+export async function getRunAsAdmin(): Promise<RunAsAdminStatus> {
+  return invoke<RunAsAdminStatus>("get_run_as_admin");
+}
+
+/** Persists the preference; enabling it restarts Sonora elevated (UAC). */
+export async function setRunAsAdmin(value: boolean): Promise<void> {
+  await invoke<void>("set_run_as_admin", { value });
+}
+
 /** Returns whether the semantic validator (sanitizer) is active. */
 export async function getSanitizerEnabled(): Promise<boolean> {
   return invoke<boolean>("get_sanitizer_enabled");

@@ -57,6 +57,8 @@ fn main() {
             "set_autostart",
             "get_dev_mode",
             "set_dev_mode",
+            "get_run_as_admin",
+            "set_run_as_admin",
             "get_context_preferences",
             "set_context_preferences",
             "get_output_policy_config",

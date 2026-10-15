@@ -72,6 +72,10 @@ struct Settings {
     /// the exact sanitizer request, parameters and reasoning that were used.
     #[serde(default)]
     dev_mode: bool,
+    /// When `true`, Sonora relaunches itself elevated at startup so it can
+    /// paste into apps running as administrator (UIPI blocks it otherwise).
+    #[serde(default)]
+    run_as_admin: bool,
     /// Compatibility field from builds that allowed disabling product modes.
     /// New builds always normalize it to `true`.
     #[serde(default)]
@@ -354,6 +358,18 @@ pub fn load_dev_mode() -> bool {
 pub fn save_dev_mode(value: bool) -> Result<(), String> {
     update(|s| {
         s.dev_mode = value;
+    })
+}
+
+/// Returns the persisted run-as-administrator flag (defaults to `false`).
+pub fn load_run_as_admin() -> bool {
+    read().run_as_admin
+}
+
+/// Persists the run-as-administrator flag, preserving any other settings.
+pub fn save_run_as_admin(value: bool) -> Result<(), String> {
+    update(|s| {
+        s.run_as_admin = value;
     })
 }
 

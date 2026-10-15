@@ -16,6 +16,9 @@ import {
   setVocabulary,
   getDevMode,
   setDevMode,
+  getRunAsAdmin,
+  setRunAsAdmin,
+  type RunAsAdminStatus,
   getSanitizerEnabled,
   setSanitizerEnabled,
   getAudioStorageConfig,
@@ -122,6 +125,8 @@ export function ConfiguracoesView({ tab: controlledTab, onTabChange }: { tab?: S
 function GeralTab() {
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const [startup, setStartup] = useState(false);
+  const [runAsAdmin, setRunAsAdminState] = useState<RunAsAdminStatus | null>(null);
+  const [runAsAdminError, setRunAsAdminError] = useState("");
   const [widgetVisibility, setWidgetVisibility] = useState<WidgetVisibilityMode>("auto");
   const [devices, setDevices] = useState<string[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
@@ -136,6 +141,7 @@ function GeralTab() {
 
   useEffect(() => {
     invoke<boolean>("get_autostart").then(setStartup).catch((e) => console.error("get_autostart failed:", e));
+    getRunAsAdmin().then(setRunAsAdminState).catch((e) => console.error("get_run_as_admin failed:", e));
     getWidgetPreferences().then((preferences) => setWidgetVisibility(preferences.visibility_mode)).catch((e) => console.error("get_widget_preferences failed:", e));
     listAudioDevices().then(setDevices).catch((e) => console.error("listAudioDevices failed:", e));
     getInputDevice().then(setSelectedDevice).catch((e) => console.error("getInputDevice failed:", e));
@@ -257,6 +263,25 @@ function GeralTab() {
         <RowGroup>
           <PreferenceRow title="Iniciar com o Windows" description="Abre o Sonora em segundo plano ao ligar o computador.">
             <Toggle label="Iniciar com o Windows" checked={startup} onChange={(v) => { setStartup(v); invoke("set_autostart", { enabled: v }).catch(console.error); }} />
+          </PreferenceRow>
+          <PreferenceRow
+            title="Executar como administrador"
+            description={runAsAdminError || (runAsAdmin?.enabled && !runAsAdmin.elevated
+              ? "Ativado, mas o Sonora está sem privilégios agora. Reinicie e confirme o aviso do Windows."
+              : "Permite colar automaticamente em aplicativos abertos como administrador. O Windows pede confirmação ao abrir o Sonora.")}
+          >
+            <Toggle
+              label="Executar como administrador"
+              checked={runAsAdmin?.enabled ?? false}
+              onChange={(v) => {
+                setRunAsAdminError("");
+                setRunAsAdminState((previous) => ({ elevated: previous?.elevated ?? false, enabled: v }));
+                setRunAsAdmin(v).catch((e) => {
+                  setRunAsAdminState((previous) => ({ elevated: previous?.elevated ?? false, enabled: false }));
+                  setRunAsAdminError(String(e?.message ?? e));
+                });
+              }}
+            />
           </PreferenceRow>
           <PreferenceRow title="Mostrar sempre a barra de ditado" description={widgetVisibility === "always" ? "Uma pequena cápsula fica visível mesmo sem ditado ativo." : "A barra aparece só durante gravação, processamento e avisos."}>
             <Toggle

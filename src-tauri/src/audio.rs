@@ -1290,6 +1290,13 @@ fn paste_into_focused_field(
     {
         return Err("Entrega cancelada".into());
     }
+    // Windows silently drops synthetic keystrokes aimed at a more privileged
+    // window, so report it instead of claiming the paste succeeded.
+    if let Some(process_id) = crate::context::capture_foreground_target().process_id {
+        if crate::elevation::process_outranks_us(process_id) == Some(true) {
+            return Err("A janela de destino está em modo administrador e o Windows bloqueia a colagem automática. O texto está na área de transferência; ative \"Executar como administrador\" nas configurações do Sonora.".into());
+        }
+    }
     enigo
         .key(modifier, Press)
         .map_err(|e| format!("failed to press modifier: {}", e))?;

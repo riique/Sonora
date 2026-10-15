@@ -68,6 +68,8 @@
     "allow-set-autostart",
     "allow-get-dev-mode",
     "allow-set-dev-mode",
+    "allow-get-run-as-admin",
+    "allow-set-run-as-admin",
     "allow-get-context-preferences",
     "allow-set-context-preferences",
     "allow-get-output-policy-config",
