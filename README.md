@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.2.0" src="https://img.shields.io/badge/vers%C3%A3o-2.2.0-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.3.0" src="https://img.shields.io/badge/vers%C3%A3o-2.3.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
