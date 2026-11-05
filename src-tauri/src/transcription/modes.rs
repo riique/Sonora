@@ -183,6 +183,7 @@ fn failed_attempt(
     }
 }
 pub struct OpenrouterAudioResultInput<'a> {
+    pub state: &'a AppState,
     pub audio: &'a [u8],
     pub ext: &'a str,
     pub prompt: &'a GeminiPrompt,
@@ -197,6 +198,7 @@ async fn openrouter_audio_result(
     input: OpenrouterAudioResultInput<'_>,
 ) -> Result<GeminiGenerateResult, String> {
     let OpenrouterAudioResultInput {
+        state,
         audio,
         ext,
         prompt,
@@ -227,13 +229,23 @@ async fn openrouter_audio_result(
             .await?
         }
         crate::openrouter::OpenRouterAudioRoute::SpeechToText => {
-            crate::openrouter::transcribe_audio(
+            let assembly_options = if crate::smart_context::is_assemblyai(model) {
+                let prepared = state.smart_context_output.read().clone().unwrap_or_default();
+                let vocab = state.vocabulary.read();
+                Some(crate::openrouter::AssemblyAiOptions {
+                    prompt: crate::smart_context::prompt(prepared.prompt.as_deref()),
+                    keyterms_prompt: crate::smart_context::keyterms(&vocab, &prepared.keyterms),
+                    conversation_context: prepared.conversation_context,
+                })
+            } else { None };
+            crate::openrouter::transcribe_audio_with_assembly(
                 audio,
                 ext,
                 model,
                 api_key,
                 std::time::Duration::from_secs(120).max(adaptive_timeout),
                 None,
+                assembly_options.as_ref(),
             )
             .await?
         }
@@ -972,6 +984,7 @@ pub async fn run_fast_accurate(
                     ),
                 );
                 openrouter_audio_result(crate::transcription::modes::OpenrouterAudioResultInput {
+                    state,
                     audio: &req.audio_bytes,
                     ext,
                     prompt: &prompt,
@@ -1318,6 +1331,7 @@ pub async fn run_precise(
                         with_authorized_context(state, transcription_prompt(file_tagging_enabled));
                     openrouter_audio_result(
                         crate::transcription::modes::OpenrouterAudioResultInput {
+                    state,
                             audio: &audio,
                             ext,
                             prompt: &prompt,
@@ -1356,6 +1370,7 @@ pub async fn run_precise(
                 let prompt =
                     precise_refinement_prompt(&w_trim, &glossary_block, file_tagging_enabled);
                 openrouter_audio_result(crate::transcription::modes::OpenrouterAudioResultInput {
+                    state,
                     audio: &audio,
                     ext,
                     prompt: &prompt,
@@ -1495,6 +1510,7 @@ pub async fn run_precise(
                 let prompt =
                     with_authorized_context(state, transcription_prompt(file_tagging_enabled));
                 openrouter_audio_result(crate::transcription::modes::OpenrouterAudioResultInput {
+                    state,
                     audio: &audio,
                     ext,
                     prompt: &prompt,
@@ -1879,6 +1895,7 @@ pub async fn run_ultra_precise(
                     );
                     openrouter_audio_result(
                         crate::transcription::modes::OpenrouterAudioResultInput {
+                    state,
                             audio: &audio,
                             ext,
                             prompt: &prompt,
