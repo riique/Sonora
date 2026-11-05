@@ -265,6 +265,7 @@ pub fn start_capture(
     );
     profile.allow_context_to_cloud &= context_preferences.allow_context_to_cloud;
     let formatting_level = profile.formatting_level;
+    let screenshot_hwnd = context.foreground_hwnd;
     let pending_session = crate::pipeline_run::RecordingSession {
         id: session_id.to_string(),
         started_at_ms,
@@ -278,6 +279,8 @@ pub fn start_capture(
     if !state.install_recording_capture(generation, fresh_stream, pending_session) {
         return Err(AudioError::Superseded);
     }
+
+    crate::smart_context::start(state, session_id, screenshot_hwnd);
 
     // Keep capture local until the silence check at stop. The legacy streaming
     // transport opens only after audio has been admitted.
@@ -570,6 +573,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 ..Default::default()
             },
         );
+        crate::smart_context::finish(state).await;
         match crate::transcription::run_product_mode_with_duration(
             state,
             wav,
@@ -1463,6 +1467,7 @@ pub(crate) fn now_timestamp() -> String {
 /// Discards the recording without building a WAV buffer and releases (or
 /// keeps ready) the input stream. Used by the panic shortcut.
 pub fn cancel_capture(state: &Arc<AppState>) {
+    crate::smart_context::discard(state);
     state.capture_spool.lock().take();
     crate::mic_ready::release_after_capture(state);
     state.clear_audio_buffer();
