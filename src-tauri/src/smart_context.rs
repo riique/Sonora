@@ -230,8 +230,15 @@ async fn analyze_image(
         .pointer("/choices/0/message/content")
         .and_then(|v| v.as_str())
         .ok_or("texto ausente")?;
+    let raw = content.trim();
+    let raw = raw
+        .strip_prefix("```json")
+        .or_else(|| raw.strip_prefix("```"))
+        .unwrap_or(raw)
+        .trim();
+    let raw = raw.strip_suffix("```").unwrap_or(raw).trim();
     let json: serde_json::Value =
-        serde_json::from_str(content.trim()).map_err(|_| "JSON inválido".to_string())?;
+        serde_json::from_str(raw).map_err(|_| "JSON inválido".to_string())?;
     let summary = json
         .get("summary")
         .and_then(|v| v.as_str())
