@@ -453,6 +453,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
     struct RecordingSessionGuard(Arc<AppState>);
     impl Drop for RecordingSessionGuard {
         fn drop(&mut self) {
+            crate::smart_context::discard(&self.0);
             self.0.recording_session.lock().take();
         }
     }
