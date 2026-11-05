@@ -235,11 +235,19 @@ async fn openrouter_audio_result(
                     .read()
                     .clone()
                     .unwrap_or_default();
+                let smart_config = state.smart_context_config.read().clone();
+                // Preserve recent speech context even when visual analysis takes too long.
+                let conversation_context =
+                    if smart_config.enabled && prepared.conversation_context.is_empty() {
+                        crate::smart_context::previous_dictations(smart_config.history_count)
+                    } else {
+                        prepared.conversation_context
+                    };
                 let vocab = state.vocabulary.read();
                 Some(crate::openrouter::AssemblyAiOptions {
                     prompt: crate::smart_context::prompt(prepared.prompt.as_deref()),
                     keyterms_prompt: crate::smart_context::keyterms(&vocab, &prepared.keyterms),
-                    conversation_context: prepared.conversation_context,
+                    conversation_context,
                 })
             } else {
                 None
