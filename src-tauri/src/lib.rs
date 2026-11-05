@@ -29,6 +29,7 @@ pub mod sanitizer_json;
 pub mod scratchpad;
 pub mod secrets;
 pub mod settings;
+pub mod smart_context;
 pub mod shortcuts;
 pub mod single_instance;
 pub mod snippets;
@@ -1504,6 +1505,7 @@ pub fn run() {
                         *state.file_tagging_enabled.write() = settings::load_file_tagging_enabled();
                         *state.gemini_pipelines.write() = settings::load_gemini_pipelines();
                         *state.context_preferences.write() = settings::load_context_preferences();
+                        *state.smart_context_config.write() = settings::load_smart_context_config();
                         *state.output_profiles.write() = settings::load_output_profiles();
                         *state.formatting_level.write() = settings::load_formatting_level();
                         *state.dictation_destination.write() =
@@ -1581,6 +1583,8 @@ pub fn run() {
             commands::get_engine_config,
             commands::get_mode_config,
             commands::update_mode_config,
+            commands::get_smart_context_config,
+            commands::set_smart_context_config,
             commands::save_api_keys,
             commands::get_api_keys,
             commands::transcribe_file,
