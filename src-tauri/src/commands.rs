@@ -177,6 +177,32 @@ fn mode_copy(
 }
 
 #[tauri::command]
+pub fn get_smart_context_config(state: State<'_, SharedState>) -> crate::smart_context::Config {
+    state.smart_context_config.read().clone()
+}
+
+#[tauri::command]
+pub async fn set_smart_context_config(
+    state: State<'_, SharedState>,
+    config: crate::smart_context::Config,
+) -> Result<crate::smart_context::Config, CommandError> {
+    let config = config.validate().map_err(CommandError::InvalidPayload)?;
+    let shared = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let _guard = crate::models::CONFIG_LOCK.lock();
+        crate::settings::save_smart_context_config(config.clone())
+            .map_err(CommandError::Internal)?;
+        if !config.enabled {
+            crate::smart_context::discard(&shared);
+        }
+        *shared.smart_context_config.write() = config.clone();
+        Ok(config)
+    })
+    .await
+    .map_err(|err| CommandError::Internal(err.to_string()))?
+}
+
+#[tauri::command]
 pub fn get_mode_config(state: State<'_, SharedState>) -> ModeConfigSnapshot {
     let mode = *state.transcription_mode.read();
     let pipelines = state.gemini_pipelines.read().clone();

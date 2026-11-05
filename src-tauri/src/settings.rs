@@ -99,6 +99,8 @@ struct Settings {
     #[serde(default)]
     context_preferences: crate::context::ContextPreferences,
     #[serde(default)]
+    smart_context_config: crate::smart_context::Config,
+    #[serde(default)]
     output_profiles: Vec<crate::output_policy::OutputProfile>,
     #[serde(default)]
     output_profiles_initialized: bool,
@@ -461,6 +463,14 @@ pub fn save_audio_directory(path: Option<String>) -> Result<(), String> {
     update(|s| {
         s.audio_directory = path.filter(|value| !value.trim().is_empty());
     })
+}
+
+pub fn load_smart_context_config() -> crate::smart_context::Config {
+    read().smart_context_config
+}
+
+pub fn save_smart_context_config(config: crate::smart_context::Config) -> Result<(), String> {
+    update(|s| s.smart_context_config = config)
 }
 
 pub fn load_context_preferences() -> crate::context::ContextPreferences {

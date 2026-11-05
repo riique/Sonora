@@ -186,7 +186,10 @@ pub struct OpenRouterTextResult {
 
 fn model_looks_dedicated_stt(model: &str) -> bool {
     let id = model.to_ascii_lowercase();
-    id.contains("whisper") || id.contains("chirp") || id.contains("transcribe")
+    id.contains("whisper")
+        || id.contains("chirp")
+        || id.contains("transcribe")
+        || id.starts_with("assemblyai/universal-3")
 }
 
 fn whisper_provider_preferences(
@@ -456,6 +459,15 @@ pub async fn generate_text(
 /// Sends audio to OpenRouter's dedicated speech-to-text endpoint. Unlike
 /// [`generate_with_audio`], this contract accepts no prompt and must only be
 /// used with models whose output modality is `transcription`.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct AssemblyAiOptions {
+    pub prompt: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub keyterms_prompt: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub conversation_context: Vec<String>,
+}
+
 pub async fn transcribe_audio(
     audio: &[u8],
     ext: &str,
@@ -463,6 +475,19 @@ pub async fn transcribe_audio(
     api_key: &str,
     timeout: Duration,
     vocabulary_prompt: Option<&str>,
+) -> Result<OpenRouterGenerateResult, String> {
+    transcribe_audio_with_assembly(audio, ext, model, api_key, timeout, vocabulary_prompt, None)
+        .await
+}
+
+pub async fn transcribe_audio_with_assembly(
+    audio: &[u8],
+    ext: &str,
+    model: &str,
+    api_key: &str,
+    timeout: Duration,
+    vocabulary_prompt: Option<&str>,
+    assembly: Option<&AssemblyAiOptions>,
 ) -> Result<OpenRouterGenerateResult, String> {
     if audio.is_empty() {
         return Err("OpenRouter STT: o áudio está vazio.".into());
@@ -493,11 +518,21 @@ pub async fn transcribe_audio(
         .file_name(filename)
         .mime_str(mime)
         .map_err(|error| format!("OpenRouter STT: MIME inválido: {error}"))?;
+    let is_assembly = crate::smart_context::is_assemblyai(model);
     let mut form = multipart::Form::new()
         .text("model", model.to_string())
-        .text("language", "pt")
         .part("file", part);
-    if let Some(provider) = whisper_provider_preferences(model, vocabulary_prompt) {
+    // Omitting language enables model-native auto detection and code-switching.
+    // Keep Portuguese fixed for legacy Whisper routes to preserve their behavior.
+    if !is_assembly {
+        form = form.text("language", "pt");
+    }
+    if is_assembly {
+        if let Some(options) = assembly {
+            let provider = serde_json::json!({ "options": { "assemblyai": options } });
+            form = form.text("provider", provider.to_string());
+        }
+    } else if let Some(provider) = whisper_provider_preferences(model, vocabulary_prompt) {
         form = form.text(
             "provider",
             serde_json::to_string(&provider).map_err(|error| error.to_string())?,

@@ -94,6 +94,8 @@
     "allow-download-local-model",
     "allow-remove-local-model",
     "allow-check-for-update",
-    "allow-install-update"
+    "allow-install-update",
+    "allow-get-smart-context-config",
+    "allow-set-smart-context-config"
   ]
 }

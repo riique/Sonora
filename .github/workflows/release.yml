@@ -2,12 +2,19 @@ name: Release
 # Publishes a signed Windows installer and latest.json to GitHub Releases.
 # Installed copies of Sonora check that file and update themselves.
 #
-# Bump the version (package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
-# README.md), then push a tag such as v2.1.0.
+# Bump the version across manifests and merge it to master to publish. Tag
+# pushes and manual dispatch remain supported for exceptional cases.
 on:
   push:
     tags: ['v*']
+    # Publish an app update automatically when the version is merged into master.
+    branches: [master]
+    paths:
+      - 'src-tauri/tauri.conf.json'
   workflow_dispatch:
+concurrency:
+  group: sonora-release
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:

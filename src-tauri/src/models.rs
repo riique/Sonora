@@ -654,6 +654,9 @@ pub struct AppState {
     /// Privacy policy and source toggles used to capture a best-effort context
     /// snapshot at the exact start of each recording.
     pub context_preferences: RwLock<crate::context::ContextPreferences>,
+    pub smart_context_config: RwLock<crate::smart_context::Config>,
+    pub smart_context_task: Mutex<Option<crate::smart_context::Pending>>,
+    pub smart_context_output: RwLock<Option<crate::smart_context::Prepared>>,
     /// Immutable session snapshot consumed by the transcription and delivery
     /// stages after recording stops.
     pub recording_session: Mutex<Option<crate::pipeline_run::RecordingSession>>,
@@ -718,6 +721,9 @@ impl AppState {
             file_tagging_enabled: RwLock::new(true),
             gemini_pipelines: RwLock::new(crate::pipeline_contract::GeminiPipelineConfig::default()),
             context_preferences: RwLock::new(crate::context::ContextPreferences::default()),
+            smart_context_config: RwLock::new(crate::smart_context::Config::default()),
+            smart_context_task: Mutex::new(None),
+            smart_context_output: RwLock::new(None),
             recording_session: Mutex::new(None),
             output_profiles: RwLock::new(Vec::new()),
             formatting_level: RwLock::new(crate::output_policy::FormattingLevel::default()),
@@ -786,6 +792,8 @@ impl AppState {
         *snapshot.file_tagging_enabled.write() = *self.file_tagging_enabled.read();
         *snapshot.gemini_pipelines.write() = self.gemini_pipelines.read().clone();
         *snapshot.context_preferences.write() = self.context_preferences.read().clone();
+        *snapshot.smart_context_config.write() = self.smart_context_config.read().clone();
+        *snapshot.smart_context_output.write() = self.smart_context_output.read().clone();
         *snapshot.output_profiles.write() = self.output_profiles.read().clone();
         *snapshot.formatting_level.write() = *self.formatting_level.read();
         *snapshot.dictation_destination.write() = *self.dictation_destination.read();
