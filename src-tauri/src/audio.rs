@@ -645,6 +645,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 Some(final_text)
             }
             Err(err_msg) => {
+                log::warn!("audio: transcription failed: {err_msg}");
                 crate::pipeline_run::emit_pipeline_progress(
                     state,
                     crate::pipeline_run::PipelineProgressEvent {

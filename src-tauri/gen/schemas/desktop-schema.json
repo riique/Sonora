@@ -351,6 +351,12 @@
           "markdownDescription": "Enables the get_recording_status command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_run_as_admin command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-run-as-admin",
+          "markdownDescription": "Enables the get_run_as_admin command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_sanitizer_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-sanitizer-enabled",
@@ -529,6 +535,12 @@
           "type": "string",
           "const": "allow-set-output-policy-config",
           "markdownDescription": "Enables the set_output_policy_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_run_as_admin command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-run-as-admin",
+          "markdownDescription": "Enables the set_run_as_admin command without any pre-configured scope."
         },
         {
           "description": "Enables the set_sanitizer_enabled command without any pre-configured scope.",
@@ -783,6 +795,12 @@
           "markdownDescription": "Denies the get_recording_status command without any pre-configured scope."
         },
         {
+          "description": "Denies the get_run_as_admin command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-run-as-admin",
+          "markdownDescription": "Denies the get_run_as_admin command without any pre-configured scope."
+        },
+        {
           "description": "Denies the get_sanitizer_enabled command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-sanitizer-enabled",
@@ -961,6 +979,12 @@
           "type": "string",
           "const": "deny-set-output-policy-config",
           "markdownDescription": "Denies the set_output_policy_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_run_as_admin command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-run-as-admin",
+          "markdownDescription": "Denies the set_run_as_admin command without any pre-configured scope."
         },
         {
           "description": "Denies the set_sanitizer_enabled command without any pre-configured scope.",

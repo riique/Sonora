@@ -30,6 +30,7 @@ fn provider_history_label(provider: GeminiProvider) -> &'static str {
 }
 
 fn emit_fallback_progress(state: &AppState, provider: &str, fallback_provider: &str, reason: &str) {
+    log::warn!("modes: {provider} failed, falling back to {fallback_provider}: {reason}");
     crate::pipeline_run::emit_pipeline_progress(
         state,
         crate::pipeline_run::PipelineProgressEvent {
