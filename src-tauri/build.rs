@@ -13,6 +13,8 @@ fn main() {
             "get_engine_config",
             "get_mode_config",
             "update_mode_config",
+            "get_smart_context_config",
+            "set_smart_context_config",
             "save_api_keys",
             "get_api_keys",
             "transcribe_file",
