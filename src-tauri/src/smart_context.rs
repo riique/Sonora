@@ -58,7 +58,7 @@ pub struct Prepared {
 }
 pub struct Pending {
     pub session_id: String,
-    pub handle: tokio::task::JoinHandle<Prepared>,
+    pub handle: tauri::async_runtime::JoinHandle<Prepared>,
 }
 pub fn is_assemblyai(model: &str) -> bool {
     model
@@ -105,7 +105,7 @@ pub fn prompt(context: Option<&str>) -> String {
         None => BASE_PROMPT.into(),
     }
 }
-fn previous_dictations(count: usize) -> Vec<String> {
+pub fn previous_dictations(count: usize) -> Vec<String> {
     let Ok(page) = crate::history::page("", 0, 25, false) else {
         return Vec::new();
     };
@@ -295,7 +295,9 @@ fn foreground_png(expected: isize) -> Option<Vec<u8>> {
             return None;
         }
         let old = SelectObject(mem, HGDIOBJ(bitmap.0));
-        let copied = BitBlt(mem, 0, 0, w, h, dc, rect.left, rect.top, SRCCOPY).as_bool();
+        let copied = BitBlt(mem, 0, 0, w, h, dc, rect.left, rect.top, SRCCOPY).is_ok();
+        // GetDIBits must not read a bitmap that is still selected in a device context.
+        let _ = SelectObject(mem, old);
         let mut bgra = vec![0u8; w as usize * h as usize * 4];
         let mut info = BITMAPINFO::default();
         info.bmiHeader = BITMAPINFOHEADER {
@@ -320,7 +322,6 @@ fn foreground_png(expected: isize) -> Option<Vec<u8>> {
         } else {
             0
         };
-        let _ = SelectObject(mem, old);
         let _ = DeleteObject(HGDIOBJ(bitmap.0));
         let _ = DeleteDC(mem);
         let _ = ReleaseDC(desktop, dc);
