@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.3.0" src="https://img.shields.io/badge/vers%C3%A3o-2.3.0-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.4.0" src="https://img.shields.io/badge/vers%C3%A3o-2.4.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
@@ -45,7 +45,14 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 <br>
 
-## Novidades desta versão
+## Novidades desta versão (2.4.0)
+
+- **Contexto inteligente opcional:** uma imagem da janela ativa e as últimas 5 ou 10 transcrições ajudam um modelo visual da OpenRouter a identificar o assunto e termos relevantes, com controle de ativação e modelo.
+- **AssemblyAI Universal-3.6 Pro:** suporte a vocabulário personalizado, contexto conversacional e prompt de domínio no endpoint OpenRouter de transcrição.
+- **Idiomas automáticos:** reconhecimento sem português fixado para a AssemblyAI, incluindo alternância entre português e inglês na mesma frase.
+- **Segurança e estabilidade:** análise paralela ao ditado, sem persistência das capturas, fallback em erros e atualização das dependências apontadas pelas auditorias.
+
+### Novidades anteriores (2.3.0)
 
 - **Ultrarrápido com provedor à escolha:** OpenRouter (Groq fixo) ou Groq direto com a sua chave, com o mesmo modelo Whisper, o mesmo vocabulário e o mesmo refino.
 - **Refinar com IA no Ultrarrápido:** uma passada rápida de IA aplica vocabulário, estilo do aplicativo e contexto autorizado ao texto do Whisper. Pode ser desligada em Ajustes › Transcrição.
@@ -62,7 +69,7 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 1. Uma única vez: em *Settings › Secrets and variables › Actions* do repositório, crie `TAURI_SIGNING_PRIVATE_KEY` (conteúdo da chave privada do updater) e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A chave pública correspondente está em `src-tauri/tauri.conf.json`.
 2. Suba a versão em `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e no topo deste README.
-3. Crie e envie a tag da versão, por exemplo `git tag v2.1.1 && git push origin v2.1.1`.
+3. Abra um PR da branch de lançamento para a `master`. Quando o arquivo `src-tauri/tauri.conf.json` muda na `master`, o workflow **Release** cria a tag e publica os instaladores assinados automaticamente. O disparo manual e o disparo por tag também continuam disponíveis.
 
 O workflow **Release** gera o instalador assinado e o `latest.json`; as instalações existentes encontram a versão nova sozinhas.
 
