@@ -47,6 +47,7 @@ import { Input, Select } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
 import { EmptyState, ErrorState, PageHeader, PreferenceRow, RowGroup, Section, Segmented } from "../components/ui/Surface";
 import { IntelligenceSettings } from "./IntelligenceSettings";
+import { SmartContextSettings } from "./SmartContextSettings";
 import { OfflineSection } from "./OfflineSection";
 import { UpdatesSection } from "./UpdatesSection";
 import { useFeatures } from "../lib/useFeatures";
@@ -613,6 +614,12 @@ function TranscricaoTab() {
           </>
         )}
       </Section>
+
+      {route?.provider === "open-router" &&
+        route.use_custom_model &&
+        route.custom_model.trim().toLowerCase().startsWith("assemblyai/universal-3") && (
+          <SmartContextSettings />
+        )}
 
       {(mode === "fast-accurate" || mode === "ultra-precise") && (
         <Section title="Segurança da rota">
