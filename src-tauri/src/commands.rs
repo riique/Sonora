@@ -192,10 +192,14 @@ pub async fn set_smart_context_config(
         let _guard = crate::models::CONFIG_LOCK.lock();
         crate::settings::save_smart_context_config(config.clone())
             .map_err(CommandError::Internal)?;
-        if !config.enabled { crate::smart_context::discard(&shared); }
+        if !config.enabled {
+            crate::smart_context::discard(&shared);
+        }
         *shared.smart_context_config.write() = config.clone();
         Ok(config)
-    }).await.map_err(|err| CommandError::Internal(err.to_string()))?
+    })
+    .await
+    .map_err(|err| CommandError::Internal(err.to_string()))?
 }
 
 #[tauri::command]

@@ -230,14 +230,20 @@ async fn openrouter_audio_result(
         }
         crate::openrouter::OpenRouterAudioRoute::SpeechToText => {
             let assembly_options = if crate::smart_context::is_assemblyai(model) {
-                let prepared = state.smart_context_output.read().clone().unwrap_or_default();
+                let prepared = state
+                    .smart_context_output
+                    .read()
+                    .clone()
+                    .unwrap_or_default();
                 let vocab = state.vocabulary.read();
                 Some(crate::openrouter::AssemblyAiOptions {
                     prompt: crate::smart_context::prompt(prepared.prompt.as_deref()),
                     keyterms_prompt: crate::smart_context::keyterms(&vocab, &prepared.keyterms),
                     conversation_context: prepared.conversation_context,
                 })
-            } else { None };
+            } else {
+                None
+            };
             crate::openrouter::transcribe_audio_with_assembly(
                 audio,
                 ext,
@@ -1331,7 +1337,7 @@ pub async fn run_precise(
                         with_authorized_context(state, transcription_prompt(file_tagging_enabled));
                     openrouter_audio_result(
                         crate::transcription::modes::OpenrouterAudioResultInput {
-                    state,
+                            state,
                             audio: &audio,
                             ext,
                             prompt: &prompt,
@@ -1895,7 +1901,7 @@ pub async fn run_ultra_precise(
                     );
                     openrouter_audio_result(
                         crate::transcription::modes::OpenrouterAudioResultInput {
-                    state,
+                            state,
                             audio: &audio,
                             ext,
                             prompt: &prompt,

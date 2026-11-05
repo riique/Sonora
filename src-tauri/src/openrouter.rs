@@ -186,7 +186,10 @@ pub struct OpenRouterTextResult {
 
 fn model_looks_dedicated_stt(model: &str) -> bool {
     let id = model.to_ascii_lowercase();
-    id.contains("whisper") || id.contains("chirp") || id.contains("transcribe") || id.starts_with("assemblyai/universal-3")
+    id.contains("whisper")
+        || id.contains("chirp")
+        || id.contains("transcribe")
+        || id.starts_with("assemblyai/universal-3")
 }
 
 fn whisper_provider_preferences(
@@ -473,7 +476,8 @@ pub async fn transcribe_audio(
     timeout: Duration,
     vocabulary_prompt: Option<&str>,
 ) -> Result<OpenRouterGenerateResult, String> {
-    transcribe_audio_with_assembly(audio, ext, model, api_key, timeout, vocabulary_prompt, None).await
+    transcribe_audio_with_assembly(audio, ext, model, api_key, timeout, vocabulary_prompt, None)
+        .await
 }
 
 pub async fn transcribe_audio_with_assembly(
