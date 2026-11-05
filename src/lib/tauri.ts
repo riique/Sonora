@@ -83,6 +83,16 @@ export async function updateModeConfig(
   return invoke<ModeConfigSnapshot>("update_mode_config", { payload });
 }
 
+export interface SmartContextConfig {
+  enabled: boolean;
+  model: string;
+  history_count: 5 | 10;
+}
+export const getSmartContextConfig = () =>
+  invoke<SmartContextConfig>("get_smart_context_config");
+export const setSmartContextConfig = (config: SmartContextConfig) =>
+  invoke<SmartContextConfig>("set_smart_context_config", { config });
+
 export interface ApiKeysPayload {
   groq: string[];
   google: string[];
