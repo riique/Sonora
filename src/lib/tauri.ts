@@ -10,77 +10,28 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * `CommandError` string if the backend returns `Err`.
  */
 
-export type TranscriptionEngine = "groq-whisper" | "deepgram-nova3" | "gemini-multimodal";
-export type SanitizerModel =
-  | "llama-70b"
-  | "gpt-oss-20b"
-  | "gpt-oss-120b"
-  | "qwen3-27b";
-
-/** Deepgram transport: REST batch vs WebSocket streaming (final only). */
-export type DeepgramMode = "batch" | "streaming_final";
-
-/** Product transcription modes (Phase 04+). */
+/** Product transcription modes recorded in history (only "fast-accurate" runs today). */
 export type TranscriptionMode =
   | "ultra-fast"
   | "fast-accurate"
   | "precise"
   | "ultra-precise";
 
-export interface EngineConfigSnapshot {
-  engine: TranscriptionEngine;
-  sanitizer: string;
-  dual_engine: boolean;
-  reasoning_enabled: boolean;
-  reasoning_effort: string;
-  deepgram_mode: DeepgramMode;
-}
+export type GeminiModel = "flash-lite35" | "flash36" | "transcribe35" | "assemblyai-universal-3-6-pro";
+export type GeminiProvider = "google-ai-studio" | "open-router";
 
-export type GeminiModel = "flash-lite35" | "flash36" | "transcribe35" | "muse-voice-transcribe-1.0";
-export type GeminiProvider = "google-ai-studio" | "open-router" | "meta";
-export type OpenRouterWhisperModel = "large-v3-turbo" | "large-v3";
-export type UltraFastProvider = "open-router" | "groq";
-export interface GeminiPipelineChoice {
-  model: GeminiModel;
+/** The single transcription route: an audio model, with Whisper as automatic backup. */
+export interface TranscriptionRoute {
   provider: GeminiProvider;
-  use_custom_model: boolean;
-  custom_model: string;
-  meta_languages?: string[];
-}
-export interface GeminiPipelineConfig {
-  ultra_fast_provider?: UltraFastProvider;
-  ultra_fast_whisper: OpenRouterWhisperModel;
-  fast_accurate: GeminiPipelineChoice;
-  precise: GeminiPipelineChoice;
-  ultra_precise: GeminiPipelineChoice;
+  model: GeminiModel;
 }
 
-export interface ModeConfigPayload {
-  modes_enabled: boolean;
-  mode: TranscriptionMode;
-  gemini_fallback_to_whisper: boolean;
-  file_tagging_enabled: boolean;
-  gemini_pipelines: GeminiPipelineConfig;
+export async function getTranscriptionRoute(): Promise<TranscriptionRoute> {
+  return invoke<TranscriptionRoute>("get_transcription_route");
 }
 
-export interface ModeConfigSnapshot {
-  modes_enabled: boolean;
-  mode: TranscriptionMode;
-  gemini_fallback_to_whisper: boolean;
-  file_tagging_enabled: boolean;
-  gemini_pipelines: GeminiPipelineConfig;
-  mode_label: string;
-  mode_description: string;
-}
-
-export async function getModeConfig(): Promise<ModeConfigSnapshot> {
-  return invoke<ModeConfigSnapshot>("get_mode_config");
-}
-
-export async function updateModeConfig(
-  payload: ModeConfigPayload,
-): Promise<ModeConfigSnapshot> {
-  return invoke<ModeConfigSnapshot>("update_mode_config", { payload });
+export async function setTranscriptionRoute(route: TranscriptionRoute): Promise<TranscriptionRoute> {
+  return invoke<TranscriptionRoute>("set_transcription_route", { route });
 }
 
 export interface SmartContextConfig {
@@ -94,11 +45,8 @@ export const setSmartContextConfig = (config: SmartContextConfig) =>
   invoke<SmartContextConfig>("set_smart_context_config", { config });
 
 export interface ApiKeysPayload {
-  groq: string[];
   google: string[];
-  deepgram: string[];
   openrouter: string[];
-  meta: string[];
 }
 
 export async function saveApiKeys(payload: ApiKeysPayload): Promise<void> {
@@ -158,36 +106,16 @@ export async function setShortcuts(config: ShortcutConfig): Promise<ShortcutConf
 
 /* ------------------------- Assist features & updates ------------------------- */
 
-export type LocalModel = "base" | "small";
-
 /** How long the microphone stays open between dictations. */
 export type MicReadyMode = "off" | "after_use" | "always";
 
 export interface FeatureSettings {
-  /** Ultrarrápido: quick AI pass applying vocabulary, style and context. */
-  quick_refine: boolean;
   /** Offer repeated corrections as vocabulary right away. */
   learning_prompts: boolean;
-  /** Transcribe on this computer when every cloud provider fails. */
-  offline_fallback: boolean;
-  offline_model: LocalModel;
   /** Install new GitHub releases automatically. */
   auto_update: boolean;
   /** Keep the microphone open so the first words are not lost. */
   mic_ready: MicReadyMode;
-}
-
-export interface LocalModelStatus {
-  model: LocalModel;
-  installed: boolean;
-  size_bytes?: number | null;
-  downloading: boolean;
-}
-
-export interface LocalModelProgress {
-  model: LocalModel;
-  downloaded: number;
-  total?: number | null;
 }
 
 export interface UpdateInfo {
@@ -199,11 +127,6 @@ export interface UpdateInfo {
 
 export const getFeatureSettings = () => invoke<FeatureSettings>("get_feature_settings");
 export const setFeatureSettings = (features: FeatureSettings) => invoke<FeatureSettings>("set_feature_settings", { features });
-export const getLocalModelStatus = (model: LocalModel) => invoke<LocalModelStatus>("get_local_model_status", { model });
-export const downloadLocalModel = (model: LocalModel) => invoke<LocalModelStatus>("download_local_model", { model });
-export const removeLocalModel = (model: LocalModel) => invoke<LocalModelStatus>("remove_local_model", { model });
-export const onLocalModelProgress = (handler: (progress: LocalModelProgress) => void): Promise<UnlistenFn> =>
-  listen<LocalModelProgress>("local-model-progress", (event) => handler(event.payload));
 export const checkForUpdate = () => invoke<UpdateInfo>("check_for_update");
 export const installUpdate = () => invoke<void>("install_update");
 export const onUpdateReady = (handler: (info: UpdateInfo) => void): Promise<UnlistenFn> =>
@@ -248,10 +171,6 @@ export async function getRecordingStatus(): Promise<RecordingStatus> {
 }
 
 /** Returns the currently active transcription engine and sanitizer config. */
-export async function getEngineConfig(): Promise<EngineConfigSnapshot> {
-  return invoke<EngineConfigSnapshot>("get_engine_config");
-}
-
 /**
  * Developer-mode capture of the sanitizer (Groq Chat Completions) request and
  * response, mirroring the Rust `SanitizerDebug`. Present on entries transcribed
@@ -456,15 +375,7 @@ export interface AudioStorageConfig {
   default_directory: string;
 }
 
-export async function getAudioStorageConfig(): Promise<AudioStorageConfig> {
-  return invoke<AudioStorageConfig>("get_audio_storage_config");
-}
 
-export async function setAudioStorageDirectory(
-  path: string | null,
-): Promise<AudioStorageConfig> {
-  return invoke<AudioStorageConfig>("set_audio_storage_directory", { path });
-}
 
 /** Opens Explorer with the saved audio file selected. */
 export async function revealHistoryAudio(id: string): Promise<void> {
@@ -482,50 +393,14 @@ export async function retryTranscription(id: string): Promise<string> {
   return invoke<string>("retry_transcription", { id });
 }
 
-export async function retryTranscriptionWithFallback(id: string): Promise<string> {
-  return invoke<string>("retry_transcription_with_fallback", { id });
-}
-
 export async function undoAiEdit(id: string, version: "raw" | "refined"): Promise<"replaced_selection" | "copied_to_clipboard"> {
   return invoke("undo_ai_edit", { id, version });
 }
 
-export type ContextSourceKind = "application" | "window_title" | "domain" | "selection" | "caret_context" | "clipboard";
-export type ContextPrivacy = "metadata_only" | "ephemeral_local" | "cloud_allowed";
-export interface ContextPreferences {
-  sources: Array<{ source: ContextSourceKind; enabled: boolean; privacy: ContextPrivacy }>;
-  persist_raw_context: boolean;
-  allow_context_to_cloud: boolean;
-  max_context_chars: number;
-}
-export interface OutputProfile {
-  id: string; name: string; enabled: boolean;
-  matcher: { processes: string[]; executables: string[]; window_titles: string[]; domains: string[] };
-  formatting_level?: "literal" | "smart" | "aggressive" | null;
-  content_type?: string | null;
-  style_instruction?: string | null;
-  allow_context_to_cloud?: boolean | null;
-}
-export interface OutputPolicyConfig {
-  formatting_level: "literal" | "smart" | "aggressive";
-  destination: "focused_field" | "clipboard_only" | "scratchpad";
-  profiles: OutputProfile[];
-  temporary_override?: string | null;
-}
-export interface VoiceSnippet { id: string; trigger: string; expansion: string; enabled: boolean; require_activation_phrase: boolean }
 export interface CorrectionEvent { id: string; before: string; after: string; count: number; timestamp_ms: number; status: string; context: { application?: string | null; domain?: string | null; profile_id?: string | null } }
-export interface ScratchpadNote { id: string; created_at_ms: number; text: string; pipeline_run_id?: string | null; profile_id?: string | null }
 
-export const getContextPreferences = () => invoke<ContextPreferences>("get_context_preferences");
-export const setContextPreferences = (preferences: ContextPreferences) => invoke<ContextPreferences>("set_context_preferences", { preferences });
-export const getOutputPolicyConfig = () => invoke<OutputPolicyConfig>("get_output_policy_config");
-export const setOutputPolicyConfig = (config: OutputPolicyConfig) => invoke<OutputPolicyConfig>("set_output_policy_config", { config });
-export const getSnippets = () => invoke<VoiceSnippet[]>("get_snippets");
-export const setSnippets = (snippets: VoiceSnippet[]) => invoke<VoiceSnippet[]>("set_snippets", { snippets });
 export const getVocabularySuggestions = () => invoke<CorrectionEvent[]>("get_vocabulary_suggestions");
 export const resolveVocabularySuggestion = (id: string, accepted: boolean) => invoke<void>("resolve_vocabulary_suggestion", { id, accepted });
-export const getScratchpadNotes = () => invoke<ScratchpadNote[]>("get_scratchpad_notes");
-export const deleteScratchpadNote = (id: string) => invoke<boolean>("delete_scratchpad_note", { id });
 
 /** Structured vocabulary category (Phase 06). */
 export type VocabularyCategory =
@@ -559,15 +434,6 @@ export async function setVocabulary(
 }
 
 /** Returns the persisted developer-mode flag. */
-export async function getDevMode(): Promise<boolean> {
-  return invoke<boolean>("get_dev_mode");
-}
-
-/** Persists the developer-mode flag (gates the request-inspection UI). */
-export async function setDevMode(value: boolean): Promise<void> {
-  await invoke<void>("set_dev_mode", { value });
-}
-
 export interface RunAsAdminStatus {
   enabled: boolean;
   elevated: boolean;
@@ -584,15 +450,6 @@ export async function setRunAsAdmin(value: boolean): Promise<void> {
 }
 
 /** Returns whether the semantic validator (sanitizer) is active. */
-export async function getSanitizerEnabled(): Promise<boolean> {
-  return invoke<boolean>("get_sanitizer_enabled");
-}
-
-/** Toggles the semantic validator on/off and persists the choice. */
-export async function setSanitizerEnabled(value: boolean): Promise<void> {
-  await invoke<void>("set_sanitizer_enabled", { value });
-}
-
 export type WidgetVisibilityMode = "auto" | "always";
 export type WidgetDock = "bottom" | "left" | "right";
 export interface WidgetPreferences {

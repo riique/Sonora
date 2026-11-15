@@ -1,9 +1,7 @@
 //! Local mocks for Gemini audio services (no network).
 
 use super::client::{extract_text, mime_for_ext, GenerateContentResponse};
-use super::prompts::{
-    refinement_prompt, transcription_prompt, REFINE_PROMPT_VERSION, TRANSCRIBE_PROMPT_VERSION,
-};
+use super::prompts::{transcription_prompt, TRANSCRIBE_PROMPT_VERSION};
 use super::types::{GeminiGenerateResult, GeminiOperation};
 
 /// Simulated remote file lifecycle for unit tests.
@@ -76,35 +74,6 @@ pub fn mock_transcribe(
     })
 }
 
-/// End-to-end mock of refine; ensures cleanup even on generate failure.
-pub fn mock_refine(
-    files: &mut MockFilesApi,
-    audio: &[u8],
-    draft: &str,
-    model_result: Result<String, String>,
-) -> Result<GeminiGenerateResult, String> {
-    let name = files.upload(audio)?;
-    let outcome = model_result.map(|t| t.trim().to_string());
-    files.delete(&name);
-    let text = outcome?;
-    if text.is_empty() {
-        return Err("o Gemini não retornou texto".into());
-    }
-    // draft is embedded in prompt (sanity for tests)
-    let _ = refinement_prompt(draft, false);
-    Ok(GeminiGenerateResult {
-        operation: GeminiOperation::Refine,
-        text,
-        model: "gemini-3.5-flash-lite".into(),
-        prompt_version: REFINE_PROMPT_VERSION.into(),
-        latency_ms: 2,
-        remote_file_name: Some(name),
-        transport: Some(super::transport::GeminiAudioTransport::FilesApi),
-        timing: Default::default(),
-        usage: Default::default(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,25 +118,6 @@ mod tests {
     }
 
     #[test]
-    fn mock_refine_deletes_on_generate_error() {
-        let mut files = MockFilesApi::new_active();
-        let err =
-            mock_refine(&mut files, b"audio", "draft", Err("generate failed".into())).unwrap_err();
-        assert!(err.contains("generate failed"));
-        assert!(files.uploaded);
-        assert!(files.deleted);
-    }
-
-    #[test]
-    fn mock_refine_success() {
-        let mut files = MockFilesApi::new_active();
-        let r = mock_refine(&mut files, b"audio", "rascunho", Ok("texto final".into())).unwrap();
-        assert_eq!(r.text, "texto final");
-        assert_eq!(r.operation, GeminiOperation::Refine);
-        assert!(files.deleted);
-    }
-
-    #[test]
     fn response_json_extract() {
         let json = r#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#;
         let parsed: GenerateContentResponse = serde_json::from_str(json).unwrap();
@@ -176,6 +126,6 @@ mod tests {
 
     #[test]
     fn transcription_prompt_loaded() {
-        assert!(!transcription_prompt(false).system_instruction.is_empty());
+        assert!(!transcription_prompt().system_instruction.is_empty());
     }
 }

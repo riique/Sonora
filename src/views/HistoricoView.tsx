@@ -18,32 +18,28 @@ import {
   Search,
   Sparkles,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input, Textarea } from "../components/ui/Input";
 import { Menu } from "../components/ui/Menu";
 import { LOG_GRID, LogStamp } from "../components/ui/LogRow";
-import { EmptyState, ErrorState, PageHeader, Segmented, SkeletonRows } from "../components/ui/Surface";
+import { EmptyState, ErrorState, PageHeader, SkeletonRows } from "../components/ui/Surface";
 import { PronunciationEvaluation } from "../components/PronunciationEvaluation";
 import { clockTime, dayKey, dayLabel, formatDuration, parseEntryDate } from "../lib/format";
 import {
   evaluatePronunciation,
-  getDevMode,
   getHistoryDetail,
   getHistoryPage,
   readHistoryAudio,
   revealHistoryAudio,
   retryTranscription,
-  retryTranscriptionWithFallback,
   undoAiEdit,
   type HistoryEntry,
   type PipelineRun,
 } from "../lib/tauri";
-import { ScratchpadView } from "./ScratchpadView";
 import { TranscricaoView } from "./TranscricaoView";
-import type { Navigate } from "./index";
+import { InterruptedAudio } from "./RecoveryView";
 
 const PAGE_SIZE = 50;
 
@@ -119,14 +115,6 @@ function transcriptRows(run: PipelineRun): Array<[string, string]> {
   });
 }
 
-function redactTechnicalText(value: unknown): string {
-  const serialized = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  return serialized
-    .replace(/Bearer\s+[^\s"']+/gi, "Bearer [REDACTED]")
-    .replace(/("(?:api[_-]?key|authorization|token)"\s*:\s*")[^"]+("?)/gi, "$1[REDACTED]$2")
-    .replace(/\b(?:sk|gsk|AIza)[-_A-Za-z0-9]{16,}\b/g, "[REDACTED]");
-}
-
 function Disclosure({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
   return (
     <details className="group/d mt-5" open={open}>
@@ -139,7 +127,7 @@ function Disclosure({ title, children, open = false }: { title: string; children
   );
 }
 
-function PipelineInspector({ entry, devMode }: { entry: HistoryEntry; devMode: boolean }) {
+function PipelineInspector({ entry }: { entry: HistoryEntry }) {
   const runs = entry.pipeline_runs ?? [];
   if (!runs.length) {
     return (
@@ -169,8 +157,6 @@ function PipelineInspector({ entry, devMode }: { entry: HistoryEntry; devMode: b
                 ["Fallback", run.fallback?.used ? "Sim" : "Não"],
                 ["Tokens", run.usage?.total_tokens?.toString() || "Desconhecido"],
                 ["Custo", costLabel(run)],
-                ["Style", run.profile_id || "Padrão"],
-                ["Saída", `${run.formatting_level} · ${run.destination}`],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0">
                   <dt className="meta-label">{label}</dt>
@@ -198,44 +184,6 @@ function PipelineInspector({ entry, devMode }: { entry: HistoryEntry; devMode: b
               </Disclosure>
             )}
 
-            {devMode && (
-              <>
-                <Disclosure title={`Tentativas (${run.attempts.length})`}>
-                  <div className="hairline-list border-y border-line">
-                    {run.attempts.map((attempt) => (
-                      <div key={attempt.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-2 text-[11.5px]">
-                        <div><span className="font-medium">{attempt.provider}</span><span className="font-mono text-muted"> / {attempt.model}</span><div className="mt-0.5 text-muted">{attempt.transport}{attempt.usage?.bytes_sent != null ? ` · ${attempt.usage.bytes_sent} bytes` : ""}{attempt.usage?.total_tokens != null ? ` · ${attempt.usage.total_tokens} tokens` : ""}{attempt.error ? ` · ${attempt.error.message}` : ""}</div></div>
-                        <div className="text-right font-mono"><div>{attempt.status.toUpperCase()}</div><div className="text-muted">{milliseconds(attempt.duration_ms)}</div></div>
-                      </div>
-                    ))}
-                  </div>
-                </Disclosure>
-
-                <Disclosure title="Tempos detalhados">
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 sm:grid-cols-3">
-                    {Object.entries(run.timings ?? {}).filter(([, value]) => value != null).map(([name, value]) => (
-                      <div key={name} className="flex items-center justify-between gap-2 text-[11px]"><span className="text-muted">{name}</span><span className="font-mono">{milliseconds(Number(value))}</span></div>
-                    ))}
-                  </div>
-                </Disclosure>
-
-                <Disclosure title={`Etapas (${run.stages.length})`}>
-                  <div className="hairline-list border-y border-line">
-                    {run.stages.map((stage) => (
-                      <div key={stage.id} className="flex items-center justify-between gap-3 py-2 text-[11.5px]"><span>{stage.stage.replace(/_/g, " ")}</span><span className="font-mono text-muted">{milliseconds(stage.duration_ms)}</span></div>
-                    ))}
-                  </div>
-                </Disclosure>
-
-                {(run.debug_info || run.attempts.some((attempt) => attempt.result.request_sanitized || attempt.result.response_sanitized)) && (
-                  <Disclosure title="Requisição e resposta (sanitizadas)">
-                    <pre className="scrollbar-thin max-h-72 overflow-auto whitespace-pre-wrap wrap-break-word rounded-[8px] bg-fill p-3 font-mono text-[10.5px] leading-4 text-strong">
-                      {redactTechnicalText(run.attempts.map((attempt) => ({ provider: attempt.provider, request: attempt.result.request_sanitized, response: attempt.result.response_sanitized })))}
-                    </pre>
-                  </Disclosure>
-                )}
-              </>
-            )}
           </section>
         );
       })}
@@ -243,10 +191,7 @@ function PipelineInspector({ entry, devMode }: { entry: HistoryEntry; devMode: b
   );
 }
 
-type Tab = "ditados" | "notas";
-
-export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
-  const [tab, setTab] = useState<Tab>("ditados");
+export function HistoricoView() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
@@ -255,7 +200,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [devMode, setDevMode] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState<Record<string, boolean>>({});
   const [evaluationOpen, setEvaluationOpen] = useState<Record<string, boolean>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -308,7 +252,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
 
   useEffect(() => {
     void refresh();
-    void getDevMode().then(setDevMode).catch(console.error);
     const unlistenPromise = listen("transcription-saved", () => void refresh());
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
@@ -388,11 +331,10 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
     }
   };
 
-  const retry = async (id: string, withFallback = false) => {
+  const retry = async (id: string) => {
     setBusyId(id);
     try {
-      if (withFallback) await retryTranscriptionWithFallback(id);
-      else await retryTranscription(id);
+      await retryTranscription(id);
       await refresh();
     } catch (error) {
       setEntryError(id, String(error));
@@ -428,7 +370,7 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm("Excluir esta transcrição? Ela continua recuperável em Ajustes › Dados e recuperação.")) return;
+    if (!window.confirm("Excluir esta transcrição e o áudio dela?")) return;
     try {
       if (activeAudioIdRef.current === id) disposeAudio();
       await invoke("delete_history_entry", { id });
@@ -479,13 +421,13 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
     <div>
       <PageHeader
         title="Histórico"
-        description={tab === "ditados" && month.count > 0 && (
+        description={month.count > 0 && (
           <span className="tabular-nums">
             Este mês: {month.count.toLocaleString("pt-BR")} {month.count === 1 ? "ditado" : "ditados"}
             {month.cost != null && <> · {formatUsd(month.cost)} em provedores</>}
           </span>
         )}
-        action={tab === "ditados" && (
+        action={(
           <>
             <Button variant={uploadOpen ? "primary" : "secondary"} onClick={() => setUploadOpen((open) => !open)} aria-expanded={uploadOpen}>
               {uploadOpen ? <X className="h-4 w-4" aria-hidden /> : <FileAudio className="h-4 w-4" aria-hidden />}
@@ -495,7 +437,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
               label="Mais opções do histórico"
               actions={[
                 { label: "Copiar esta página", icon: <ClipboardCopy />, onSelect: () => void copyAll(), disabled: !hasCopyable },
-                { label: "Itens removidos", icon: <Undo2 />, onSelect: () => onNavigate?.("ajustes", "dados"), hidden: !onNavigate },
                 { label: "Limpar histórico", icon: <Trash2 />, onSelect: () => void clearAll(), danger: true, disabled: !items.length },
               ]}
             />
@@ -503,20 +444,15 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
         )}
       />
 
-      {uploadOpen && tab === "ditados" && (
+      {uploadOpen && (
         <div className="mb-10 animate-fade-in">
           <TranscricaoView />
         </div>
       )}
 
+      <InterruptedAudio onRecovered={() => void refresh()} />
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Segmented<Tab>
-          label="Tipo de conteúdo"
-          value={tab}
-          onChange={setTab}
-          options={[{ value: "ditados", label: "Ditados" }, { value: "notas", label: "Notas" }]}
-        />
-        {tab === "ditados" && (
           <div className="relative min-w-56 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
             <Input
@@ -531,13 +467,30 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
               className="pl-9"
             />
           </div>
-        )}
       </div>
 
-      {tab === "notas" ? <ScratchpadView embedded /> : (
         <>
           {notice && <p role="status" className="mb-4 text-[12.5px] text-muted">{notice}</p>}
-          {errors.load && <ErrorState><p>{errors.load}</p><button type="button" className="mt-1 font-medium underline" onClick={() => void refresh()}>Tentar novamente</button></ErrorState>}
+          {errors.load && (
+            <ErrorState>
+              <p>{errors.load}</p>
+              <div className="mt-1 flex gap-4">
+                <button type="button" className="font-medium underline" onClick={() => void refresh()}>Tentar novamente</button>
+                <button
+                  type="button"
+                  className="font-medium underline"
+                  onClick={() => {
+                    if (!window.confirm("Guardar uma cópia do histórico e descartar só a última gravação incompleta?")) return;
+                    invoke("repair_history_journal")
+                      .then(() => refresh())
+                      .catch((error) => setErrors((current) => ({ ...current, load: String(error) })));
+                  }}
+                >
+                  Reparar histórico
+                </button>
+              </div>
+            </ErrorState>
+          )}
           {loading ? (
             <SkeletonRows count={6} />
           ) : items.length === 0 ? (
@@ -596,7 +549,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
                                   <p className="mt-1.5 text-[11.5px] text-muted tabular-nums">
                                     {entry.words} palavras · {productModeLabel(entry.mode) || entry.engine}
                                     {cost != null && <> · {formatUsd(cost)}</>}
-                                    {devMode && entry.model && <span className="font-mono"> · {entry.model}</span>}
                                   </p>
                                   {applied.length > 0 && (
                                     <ul className="applied-list" aria-label="O que foi aplicado">
@@ -645,7 +597,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
                                     actions={[
                                       { label: "Editar texto", icon: <Pencil />, onSelect: () => { setEditingId(entry.id); setEditDraft(entry.text); }, hidden: isError },
                                       { label: "Retranscrever", icon: <RefreshCw />, onSelect: () => void retry(entry.id), hidden: !hasAudio || isError, disabled: busyId !== null },
-                                      { label: "Retranscrever com fallback", icon: <RefreshCw />, onSelect: () => void retry(entry.id, true), hidden: !hasAudio, disabled: busyId !== null },
                                       { label: entry.evaluation ? (evaluationOpen[entry.id] ? "Ocultar pronúncia" : "Ver pronúncia") : "Avaliar pronúncia", icon: <Sparkles />, onSelect: () => void evaluate(entry), hidden: !hasAudio || isError },
                                       { label: "Voltar à versão bruta", icon: <RotateCcw />, onSelect: () => void undo(entry, "raw"), hidden: isError || !latestRun?.transcript.raw },
                                       { label: "Voltar à versão refinada", icon: <RotateCcw />, onSelect: () => void undo(entry, "refined"), hidden: isError || !latestRun?.transcript.refined },
@@ -662,7 +613,7 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
                           <div className="ml-[72px] max-w-[68ch]">
                             {entry.error_message && !isError && <p role="status" className="mt-3 text-[12.5px] text-live">{entry.error_message} Use Copiar para entregar o texto sem retranscrever.</p>}
                             {errors[entry.id] && <p className="mt-3 text-[12px] text-live" role="alert">{errors[entry.id]}</p>}
-                            {detailsOpen[entry.id] && <PipelineInspector entry={entry} devMode={devMode} />}
+                            {detailsOpen[entry.id] && <PipelineInspector entry={entry} />}
                             {evaluationOpen[entry.id] && entry.evaluation && <div className="mt-5"><PronunciationEvaluation markdown={entry.evaluation} /></div>}
                           </div>
                         </li>
@@ -686,7 +637,6 @@ export function HistoricoView({ onNavigate }: { onNavigate?: Navigate } = {}) {
             </div>
           )}
         </>
-      )}
     </div>
   );
 }

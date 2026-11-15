@@ -16,7 +16,6 @@ import {
   type InsightsTab,
 } from "./insights-utils";
 import {
-  getDevMode,
   getInsights,
   setInsightsBackfillPaused,
   type ApplicationInsight,
@@ -198,7 +197,6 @@ export function InsightsView() {
   const [error, setError] = useState<string | null>(null);
   const [backfillBusy, setBackfillBusy] = useState(false);
   const [backfillError, setBackfillError] = useState<string | null>(null);
-  const [developerMode, setDeveloperMode] = useState(false);
   const mountedRef = useRef(true);
   const periodRef = useRef(period);
   const reloadRunningRef = useRef(false);
@@ -229,7 +227,6 @@ export function InsightsView() {
   }, []);
   useEffect(() => {
     mountedRef.current = true;
-    void getDevMode().then((enabled) => { if (mountedRef.current) setDeveloperMode(enabled); }).catch(() => undefined);
     return () => { mountedRef.current = false; };
   }, []);
   useEffect(() => {
@@ -291,8 +288,8 @@ export function InsightsView() {
           <h2 className="text-[17px] font-semibold text-ink">Seus Insights começam com o próximo ditado</h2>
           <p className="mt-2 max-w-[52ch] text-[13px] leading-6 text-muted">Use o Sonora no dia a dia. As primeiras descobertas sobre sua fala e seu uso aparecem aqui conforme você dita.</p>
         </div>
-      ) : data && <div id={`insights-panel-${tab}`} role="tabpanel" aria-labelledby={`insights-tab-${tab}`} tabIndex={0} className="outline-none">{tab === "usage" ? <UsageTab data={data} /> : <VoiceInsights data={data} reload={reload} developerMode={developerMode} />}</div>}
-      {data && <footer className="mt-16 flex items-center justify-between gap-4 border-t border-line pt-5 text-[11.5px] text-muted">{developerMode ? <span className="font-mono">analysis v{data.analysis_version} · {number(data.audio.analyzed_sessions)} gravações com áudio analisado</span> : <span>Calculado localmente. Suas estatísticas ficam neste computador.</span>}</footer>}
+      ) : data && <div id={`insights-panel-${tab}`} role="tabpanel" aria-labelledby={`insights-tab-${tab}`} tabIndex={0} className="outline-none">{tab === "usage" ? <UsageTab data={data} /> : <VoiceInsights data={data} reload={reload} />}</div>}
+      {data && <footer className="mt-16 flex items-center justify-between gap-4 border-t border-line pt-5 text-[11.5px] text-muted"><span>Calculado localmente. Suas estatísticas ficam neste computador.</span></footer>}
     </div>
   );
 }

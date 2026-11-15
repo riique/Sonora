@@ -7,32 +7,25 @@ pub mod commands;
 pub mod context;
 pub mod elevation;
 pub mod gemini;
-pub mod groq;
 pub mod history;
 pub mod insights;
 pub mod insights_intelligence;
 pub mod learning;
-pub mod local_whisper;
 pub mod maintenance;
-pub mod meta_asr;
 pub mod mic_control;
 pub mod mic_ready;
 pub mod models;
-pub mod native_messaging;
 pub mod openrouter;
 pub mod operations;
 pub mod output_policy;
 pub mod pipeline_contract;
 pub mod pipeline_run;
 pub mod redaction;
-pub mod sanitizer_json;
-pub mod scratchpad;
 pub mod secrets;
 pub mod settings;
 pub mod shortcuts;
 pub mod single_instance;
 pub mod smart_context;
-pub mod snippets;
 pub mod speech_presence;
 pub mod storage;
 pub mod transcription;
@@ -1474,42 +1467,16 @@ pub fn run() {
                                 log::warn!("elevation: staying non-elevated: {error}");
                             }
                         }
-                        context::init(dir.clone());
-                        scratchpad::init(dir.clone());
-                        snippets::init(dir.clone());
                         learning::init(dir.clone());
-                        local_whisper::init(dir.clone());
                         insights::init(dir.clone());
                         *state.compact_mode.write() = settings::load_compact();
                         *state.widget_visibility_mode.write() =
                             settings::load_widget_visibility_mode();
                         *state.widget_dock.write() = settings::load_widget_dock();
-                        *state.system_prompt.write() = settings::load_system_prompt();
 
-                        if let Some(engine) = settings::load_engine() {
-                            *state.engine.write() = engine;
-                        }
-                        if let Some(sanitizer) = settings::load_sanitizer() {
-                            *state.sanitizer.write() = sanitizer;
-                        }
-                        *state.dual_engine.write() = settings::load_dual_engine();
-                        *state.reasoning_enabled.write() = settings::load_reasoning_enabled();
-                        *state.deepgram_mode.write() = settings::load_deepgram_mode();
-                        *state.sanitizer_enabled.write() = settings::load_sanitizer_enabled();
-                        *state.reasoning_effort.write() = settings::load_reasoning_effort();
                         *state.vocabulary.write() = settings::load_vocabulary();
-                        *state.modes_enabled.write() = settings::load_modes_enabled();
-                        *state.transcription_mode.write() = settings::load_transcription_mode();
-                        *state.gemini_fallback_to_whisper.write() =
-                            settings::load_gemini_fallback_to_whisper();
-                        *state.file_tagging_enabled.write() = settings::load_file_tagging_enabled();
                         *state.gemini_pipelines.write() = settings::load_gemini_pipelines();
-                        *state.context_preferences.write() = settings::load_context_preferences();
                         *state.smart_context_config.write() = settings::load_smart_context_config();
-                        *state.output_profiles.write() = settings::load_output_profiles();
-                        *state.formatting_level.write() = settings::load_formatting_level();
-                        *state.dictation_destination.write() =
-                            settings::load_dictation_destination();
                         *state.features.write() = settings::load_features();
                         insights::start_backfill(app.handle().clone());
                     }
@@ -1579,31 +1546,23 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::update_engine_config,
-            commands::get_engine_config,
-            commands::get_mode_config,
-            commands::update_mode_config,
-            commands::get_smart_context_config,
-            commands::set_smart_context_config,
             commands::save_api_keys,
             commands::get_api_keys,
+            commands::get_transcription_route,
+            commands::set_transcription_route,
+            commands::get_smart_context_config,
+            commands::set_smart_context_config,
+            commands::list_recovery_audio,
+            commands::repair_history_journal,
             commands::transcribe_file,
             commands::evaluate_pronunciation,
             commands::toggle_recording_state,
             commands::cancel_recording,
             commands::get_recording_status,
             commands::get_recording_elapsed,
-            commands::get_local_diagnostics,
-            commands::archive_history_audio,
             commands::retry_recovery_audio,
-            commands::export_local_data,
-            commands::import_local_data,
             commands::get_history_page,
             commands::get_history_detail,
-            commands::restore_history_entry,
-            commands::repair_history_journal,
-            commands::get_audio_storage_config,
-            commands::set_audio_storage_directory,
             commands::reveal_history_audio,
             commands::read_history_audio,
             commands::clear_history,
@@ -1623,29 +1582,15 @@ pub fn run() {
             commands::start_mic_test,
             commands::stop_mic_test,
             commands::retry_transcription,
-            commands::retry_transcription_with_fallback,
             commands::undo_ai_edit,
             commands::get_autostart,
             commands::set_autostart,
-            commands::get_dev_mode,
-            commands::set_dev_mode,
             commands::get_run_as_admin,
             commands::set_run_as_admin,
-            commands::get_context_preferences,
-            commands::set_context_preferences,
-            commands::get_output_policy_config,
-            commands::set_output_policy_config,
-            commands::get_scratchpad_notes,
-            commands::delete_scratchpad_note,
-            commands::get_snippets,
             commands::check_for_update,
             commands::install_update,
             commands::get_feature_settings,
             commands::set_feature_settings,
-            commands::get_local_model_status,
-            commands::download_local_model,
-            commands::remove_local_model,
-            commands::set_snippets,
             commands::get_vocabulary_suggestions,
             commands::resolve_vocabulary_suggestion,
             commands::get_insights,
@@ -1653,8 +1598,6 @@ pub fn run() {
             commands::set_ai_voice_profile_enabled,
             commands::generate_ai_voice_profile,
             commands::add_insight_correction_to_vocabulary,
-            commands::get_sanitizer_enabled,
-            commands::set_sanitizer_enabled,
         ])
         .on_window_event(|window, event| {
             // Diagnostic logging of focus / lifecycle / resize events for the

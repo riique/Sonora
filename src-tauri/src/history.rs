@@ -442,24 +442,6 @@ pub fn delete_entry(id: &str) -> bool {
     }
     result.is_ok()
 }
-pub fn restore_entry(id: &str) -> Result<(), String> {
-    mutate(|store| {
-        let entry = store
-            .entries
-            .get(id)
-            .ok_or("Entrada removida não encontrada")?;
-        if store.active.contains(id) {
-            return Err("Entrada já está no histórico".into());
-        }
-        Ok(Event::Upsert {
-            entry: Box::new(entry.clone()),
-        })
-    })?;
-    if let Some(entry) = get(id) {
-        crate::insights::enqueue_entry(entry);
-    }
-    Ok(())
-}
 #[derive(serde::Serialize)]
 pub struct Page {
     pub items: Vec<HistoryEntry>,
@@ -590,59 +572,6 @@ fn repair_at(file: &std::path::Path) -> Result<(), String> {
     }
     crate::storage::atomic_write(file, &bytes[..end])?;
     Ok(())
-}
-
-pub fn import_entries(
-    mut entries: Vec<HistoryEntry>,
-    deleted: Vec<String>,
-) -> Result<usize, String> {
-    let mut count = 0;
-    mutate(|store| {
-        entries.retain(|entry| !store.entries.contains_key(&entry.id));
-        for entry in &mut entries {
-            migrate_entry(entry);
-        }
-        count = entries.len();
-        Ok(Event::Import { entries, deleted })
-    })?;
-    Ok(count)
-}
-
-pub fn get_including_deleted(id: &str) -> Result<HistoryEntry, String> {
-    access(|store| store.entries.get(id).cloned())?.ok_or("Entrada não encontrada".into())
-}
-pub fn archive_audio_path(id: &str, path: String) -> Result<(), String> {
-    mutate(|store| {
-        if !store.entries.contains_key(id) {
-            return Err("Entrada não encontrada".into());
-        }
-        Ok(Event::AudioPath {
-            id: id.into(),
-            path,
-        })
-    })
-}
-
-pub fn export_entries() -> Result<(Vec<HistoryEntry>, Vec<String>), String> {
-    access(|store| {
-        let deleted: Vec<_> = store
-            .entries
-            .keys()
-            .filter(|id| !store.active.contains(*id))
-            .cloned()
-            .collect();
-        let mut entries: Vec<_> = store
-            .order
-            .iter()
-            .filter_map(|id| store.entries.get(id).cloned())
-            .collect();
-        entries.extend(
-            deleted
-                .iter()
-                .filter_map(|id| store.entries.get(id).cloned()),
-        );
-        (entries, deleted)
-    })
 }
 
 #[cfg(test)]

@@ -8,7 +8,6 @@ import {
   getShortcuts,
   getWidgetPreferences,
   retryTranscription,
-  retryTranscriptionWithFallback,
   setGadgetVisualState,
   toggleRecordingState,
   type HistoryEntry,
@@ -312,17 +311,6 @@ export function GadgetApp() {
     }
   };
 
-  const useFallback = async () => {
-    if (!failure?.canRetry || retrying) return;
-    setRetrying(true); setProgressMessage("Usando rota alternativa…"); transition("processing_long");
-    try { await retryTranscriptionWithFallback(failure.id); }
-    catch (error) {
-      setRetrying(false);
-      setFailure((current) => current ? { ...current, message: typeof error === "string" ? error : "O fallback falhou." } : current);
-      transition("error");
-    }
-  };
-
   if (state === "hidden") return null;
 
   return (
@@ -349,7 +337,6 @@ export function GadgetApp() {
           onToggle={() => void startOrStop()}
           onCancel={() => void cancel()}
           onRetry={() => void retry()}
-          onFallback={() => void useFallback()}
         />
       </div>
     </div>
@@ -366,10 +353,9 @@ interface GadgetPillProps {
   onToggle: () => void;
   onCancel: () => void;
   onRetry: () => void;
-  onFallback: () => void;
 }
 
-function GadgetPill({ state, level, shortcut, failure, retrying, progressMessage, onToggle, onCancel, onRetry, onFallback }: GadgetPillProps) {
+function GadgetPill({ state, level, shortcut, failure, retrying, progressMessage, onToggle, onCancel, onRetry }: GadgetPillProps) {
   if (state === "idle") {
     return <button type="button" onClick={onToggle} className="sonora-bar sonora-bar--idle" aria-label={`Iniciar ditado. ${shortcut}`}><MiniWave /></button>;
   }
@@ -409,9 +395,9 @@ function GadgetPill({ state, level, shortcut, failure, retrying, progressMessage
         <AlertCircle className="h-4 w-4 shrink-0 text-[#ffaaa3]" aria-hidden />
         <span className="sonora-bar__error-text">{failure?.message || "Não foi possível concluir"}</span>
         {failure?.canRetry ? (
-          <><button type="button" onClick={onRetry} disabled={retrying} className="sonora-bar__retry" aria-label="Tentar transcrever o áudio salvo novamente">
+          <button type="button" onClick={onRetry} disabled={retrying} className="sonora-bar__retry" aria-label="Tentar transcrever o áudio salvo novamente">
             <RefreshCw className={`h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} aria-hidden /><span>Tentar novamente</span>
-          </button><button type="button" onClick={onFallback} disabled={retrying} className="sonora-bar__retry" aria-label="Usar uma rota alternativa de transcrição"><span>Usar fallback</span></button></>
+          </button>
         ) : (
           <button type="button" onClick={onCancel} className="sonora-bar__dismiss" aria-label="Dispensar erro"><X className="h-3.5 w-3.5" aria-hidden /></button>
         )}
@@ -484,7 +470,7 @@ export function GadgetPreviewApp() {
         {states.map((previewState) => (
           <figure key={previewState}>
             <div className="gadget-preview__stage">
-              <GadgetPill state={previewState} level={level} shortcut="Ctrl + B" failure={{ id: "preview", message: "Falha na transcrição", canRetry: true }} retrying={false} progressMessage={previewState === "processing_long" ? "Groq indisponível · usando Deepgram" : null} onToggle={() => undefined} onCancel={() => undefined} onRetry={() => undefined} onFallback={() => undefined} />
+              <GadgetPill state={previewState} level={level} shortcut="Ctrl + B" failure={{ id: "preview", message: "Falha na transcrição", canRetry: true }} retrying={false} progressMessage={previewState === "processing_long" ? "Modelo indisponível · usando Whisper" : null} onToggle={() => undefined} onCancel={() => undefined} onRetry={() => undefined} />
             </div>
             <figcaption>{previewState}</figcaption>
           </figure>

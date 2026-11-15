@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
 
 test("portrait is readable without exposing confidence, models or acoustic numbers upfront", async () => {
-  await act(async () => root.render(<VoiceInsights data={insightsFixture()} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={insightsFixture()} reload={reload} />));
   expect(host.querySelector("h2")?.textContent).toBe("Ideias que ganham forma");
   expect(host.querySelector("blockquote")?.textContent).toContain("Vamos por partes");
   expect(host.querySelectorAll(".voice-habits article")).toHaveLength(3);
@@ -30,7 +30,7 @@ test("portrait is readable without exposing confidence, models or acoustic numbe
 test("AI generation waits for explicit confirmation and survives failure", async () => {
   const data = insightsFixture(); data.profile_generation_ready = true;
   bridge.invoke.mockRejectedValue(new Error("synthetic provider failure"));
-  await act(async () => root.render(<VoiceInsights data={data} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={data} reload={reload} />));
   await act(async () => host.querySelector<HTMLButtonElement>(".voice-portrait button")!.click());
   expect(host.querySelector<HTMLDialogElement>("dialog")?.open).toBe(true);
   expect(host.querySelector("dialog")?.textContent).toContain("meta/muse-spark-1.3-contributor");
@@ -44,7 +44,7 @@ test("AI generation waits for explicit confirmation and survives failure", async
 
 test("update stays visible with words remaining and enables only at the backend milestone", async () => {
   const data = insightsFixture();
-  await act(async () => root.render(<VoiceInsights data={data} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={data} reload={reload} />));
   const button = host.querySelector<HTMLButtonElement>(".voice-portrait button")!;
   expect(button.textContent).toBe("Atualizar meu retrato");
   expect(button.disabled).toBe(true);
@@ -54,12 +54,12 @@ test("update stays visible with words remaining and enables only at the backend 
   expect(bridge.invoke).not.toHaveBeenCalled();
 
   data.profile_progress_words = 1999;
-  await act(async () => root.render(<VoiceInsights data={{...data}} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={{...data}} reload={reload} />));
   expect(host.textContent).toContain("Falta 1 palavra ditada para atualizar seu retrato.");
   expect(button.disabled).toBe(true);
 
   data.profile_progress_words = 2000; data.profile_generation_ready = true;
-  await act(async () => root.render(<VoiceInsights data={{...data}} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={{...data}} reload={reload} />));
   expect(button.disabled).toBe(false);
   expect(host.textContent).toContain("Você já pode atualizar seu retrato.");
   expect(bridge.invoke).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ test("update stays visible with words remaining and enables only at the backend 
 
 test("first portrait shows its own remaining words without claiming automatic generation", async () => {
   const data = insightsFixture(false); data.profile_progress_words = 120; data.profile_required_words = 500;
-  await act(async () => root.render(<VoiceInsights data={data} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={data} reload={reload} />));
   const button = host.querySelector<HTMLButtonElement>(".voice-portrait button")!;
   expect(button.textContent).toBe("Criar meu retrato");
   expect(button.disabled).toBe(true);
@@ -77,7 +77,7 @@ test("first portrait shows its own remaining words without claiming automatic ge
 
 test("empty profile and disabled AI retain local discoveries and optional preferences", async () => {
   const data = insightsFixture(false); data.profile_enabled = false;
-  await act(async () => root.render(<VoiceInsights data={data} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={data} reload={reload} />));
   expect(host.textContent).toContain("Seu jeito de falar vai aparecer aqui");
   expect(host.textContent).toContain("Vamos por partes");
   expect(host.querySelector(".voice-portrait button")).toBeNull();
@@ -87,7 +87,7 @@ test("empty profile and disabled AI retain local discoveries and optional prefer
 
 test("vocabulary remains actionable under details and preserves error feedback", async () => {
   bridge.invoke.mockResolvedValue(undefined);
-  await act(async () => root.render(<VoiceInsights data={insightsFixture()} reload={reload} developerMode={false} />));
+  await act(async () => root.render(<VoiceInsights data={insightsFixture()} reload={reload} />));
   const add = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Adicionar ao vocabulário")!;
   await act(async () => add.click());
   expect(bridge.invoke).toHaveBeenCalledWith("add_insight_correction_to_vocabulary", { before: "planejar", after: "planejamento" });

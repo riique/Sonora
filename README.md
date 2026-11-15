@@ -5,14 +5,14 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.4.0" src="https://img.shields.io/badge/vers%C3%A3o-2.4.0-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.5.0" src="https://img.shields.io/badge/vers%C3%A3o-2.5.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
 
 <p align="center">
   <a href="#como-funciona"><b>Como funciona</b></a> &nbsp;·&nbsp;
-  <a href="#pipelines">Pipelines</a> &nbsp;·&nbsp;
+  <a href="#transcrição">Transcrição</a> &nbsp;·&nbsp;
   <a href="#comece-agora">Comece agora</a> &nbsp;·&nbsp;
   <a href="#arquitetura">Arquitetura</a> &nbsp;·&nbsp;
   <a href="#documentação">Documentação</a>
@@ -45,25 +45,23 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 <br>
 
-## Novidades desta versão (2.4.0)
+## Novidades desta versão (2.5.0)
+
+**Mais simples.** O Sonora agora faz uma coisa só e bem feita: você fala, ele transcreve e cola o texto no campo em foco.
+
+- **Um modo só:** “Rápido e preciso”. Em **Ajustes › Transcrição** você escolhe o provedor (OpenRouter ou Google AI Studio) e o modelo: AssemblyAI Universal-3.6 Pro, Gemini 3.5 Transcribe, Gemini 3.5 Flash-Lite ou Gemini 3.6 Flash. Se o modelo falhar, o Whisper entra sozinho como reserva e o Histórico marca isso.
+- **AssemblyAI sem ID customizado:** agora é uma opção fixa da lista. Quem usava `assemblyai/universal-3-6-pro` como ID customizado é migrado sozinho; o contexto inteligente continua aparecendo quando ele está selecionado.
+- **Ajustes em três abas:** Geral, Transcrição (modelo e chaves) e Vocabulário.
+- **Continuam:** comando de voz (`Ctrl+Shift+B`), vocabulário com sugestões das suas correções, Histórico, Insights e o retrato da sua voz.
+- **Gravações interrompidas** aparecem no topo do Histórico para retranscrever, só quando existem.
+- **Removido:** os modos Ultrarrápido, Preciso e Ultrapreciso, IDs de modelo customizados, provedor Meta, o validador semântico, o refinamento rápido, snippets, styles por aplicativo, captura de texto da tela e a extensão de navegador, FileTagging, níveis de formatação, notas, transcrição offline, backup, itens removidos e modo desenvolvedor.
+
+### Novidades anteriores (2.4.0)
 
 - **Contexto inteligente opcional:** uma imagem da janela ativa e as últimas 5 ou 10 transcrições ajudam um modelo visual da OpenRouter a identificar o assunto e termos relevantes, com controle de ativação e modelo.
 - **AssemblyAI Universal-3.6 Pro:** suporte a vocabulário personalizado, contexto conversacional e prompt de domínio no endpoint OpenRouter de transcrição.
 - **Idiomas automáticos:** reconhecimento sem português fixado para a AssemblyAI, incluindo alternância entre português e inglês na mesma frase.
 - **Segurança e estabilidade:** análise paralela ao ditado, sem persistência das capturas, fallback em erros e atualização das dependências apontadas pelas auditorias.
-
-### Novidades anteriores (2.3.0)
-
-- **Ultrarrápido com provedor à escolha:** OpenRouter (Groq fixo) ou Groq direto com a sua chave, com o mesmo modelo Whisper, o mesmo vocabulário e o mesmo refino.
-- **Refinar com IA no Ultrarrápido:** uma passada rápida de IA aplica vocabulário, estilo do aplicativo e contexto autorizado ao texto do Whisper. Pode ser desligada em Ajustes › Transcrição.
-- **Comando de voz (`Ctrl+Shift+B`):** selecione um texto, aperte o atalho e diga o que fazer (“deixa mais formal”, “traduz para inglês”). Sem seleção, o Sonora escreve o que você pedir.
-- **Segurar para falar:** em Ajustes › Geral › Atalhos, escolha entre apertar para alternar ou segurar enquanto fala.
-- **Snippets no meio da frase:** “meu perfil é snippet meu github” expande só o trecho do snippet.
-- **Vocabulário que aprende:** ao corrigir a mesma palavra duas vezes no Histórico, o Sonora oferece guardá-la.
-- **Histórico explica o que aconteceu:** cada ditado mostra o que foi aplicado (IA, vocabulário, style, snippet, offline) e o custo; o topo mostra o total do mês.
-- **Sem internet:** com o modelo local baixado (whisper.cpp), o ditado é transcrito no computador quando todos os provedores falham.
-- **Atualização automática:** novas versões publicadas no GitHub são instaladas ao abrir o app.
-- **Removido:** o caminho legado de motores (Deepgram e motor duplo), que não era mais executado.
 
 ### Publicar uma versão (atualização automática)
 
@@ -89,27 +87,20 @@ O workflow **Release** gera o instalador assinado e o `latest.json`; as instala�
 
 <br>
 
-## Pipelines
+## Transcrição
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/modes-dark.svg">
-  <img alt="Os quatro pipelines, do mais rápido ao mais preciso: Ultrarrápido, Rápido e preciso, Preciso e Ultrapreciso." src="docs/assets/modes-light.svg" width="100%">
-</picture>
+Cada ditado vai para um modelo de transcrição, escolhido em **Ajustes › Transcrição**:
 
-Escolha o equilíbrio entre velocidade e precisão em **Configurações**. Cada pipeline aceita um modelo customizado via Google AI Studio ou OpenRouter.
+| Modelo | Pelo OpenRouter | Pelo Google AI Studio |
+|:--|:--|:--|
+| AssemblyAI Universal-3.6 Pro | `assemblyai/universal-3-6-pro` | — |
+| Gemini 3.5 Transcribe | `google/gemini-3.5-transcribe` | `gemini-3.5-transcribe` |
+| Gemini 3.5 Flash-Lite | `google/gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` |
+| Gemini 3.6 Flash | `google/gemini-3.6-flash` | `gemini-3.6-flash` |
 
-| Modo | Fluxo | Sanitizer | Fallback típico |
-|:--|:--|:--:|:--|
-| **Ultrarrápido** | Whisper via OpenRouter STT (Groq) ou Groq direto | — | — |
-| **Rápido e preciso** | Gemini (Files API ou inline) | — | Whisper (configurável) |
-| **Preciso** | Whisper ∥ upload → refine Gemini | — | Whisper ou Gemini puro |
-| **Ultrapreciso** | Whisper ∥ upload → sanitizer → Gemini | JSON | Texto sanitizado ou Whisper |
+Se o modelo falhar, responder vazio ou estiver sem chave, o áudio vai para o `whisper-large-v3-turbo` pelo OpenRouter (Groq fixo). O vocabulário entra no prompt do modelo (ou como `keyterms_prompt` na AssemblyAI) e como dica para o Whisper. Com a AssemblyAI, o [contexto inteligente](docs/ASSEMBLYAI_SMART_CONTEXT.md) opcional também pode ajudar.
 
-No Ultrarrápido, escolha entre `whisper-large-v3-turbo` e `whisper-large-v3`, pelo OpenRouter (Groq fixo) ou direto na Groq com a sua chave. No OpenRouter, Chat Completions multimodal e Speech-to-Text dedicado são roteados separadamente.
-
-**Prompt universal.** Os modelos Gemini multimodais recebem uma única `systemInstruction` que trata, trecho a trecho, conversa comum, programação e conteúdo acadêmico. Não é preciso escolher um tipo de conteúdo antes de falar.
-
-**FileTagging.** Um botão em Configurações converte referências faladas e inequívocas a arquivos em menções como `@src/components/Header.tsx`. O Sonora prepara a menção no texto; a integração com o IDE ou chat fica a cargo do aplicativo de destino.
+**Prompt universal.** Os modelos recebem uma única `systemInstruction` que trata, trecho a trecho, conversa comum, programação e conteúdo acadêmico. Não é preciso escolher um tipo de conteúdo antes de falar.
 
 <br>
 
@@ -146,7 +137,7 @@ No Ultrarrápido, escolha entre `whisper-large-v3-turbo` e `whisper-large-v3`, p
 - Local, sem limite artificial, paginado e incremental
 - Modo, modelos, estágios, textos intermediários, fallback e latências de cada ditado
 - Copiar, editar, excluir, retranscrever e avaliar a pronúncia
-- Áudio revelável no Explorer, em uma pasta que você escolhe
+- Áudio revelável no Explorer
 
 </td>
 <td width="50%" valign="top">
@@ -155,8 +146,8 @@ No Ultrarrápido, escolha entre `whisper-large-v3-turbo` e `whisper-large-v3`, p
 
 - Vocabulário estruturado: grafia canônica, aliases, categoria e literais *strict*
 - Telemetria apenas local: latência por estágio, RTF estimado e throughput
-- Diagnóstico local, backup com áudio opcional e arquivamento
-- Seleção rápida de destino e Style
+- Sugestões de vocabulário a partir das suas correções
+- Comando de voz sobre o texto selecionado
 
 </td>
 </tr>
@@ -170,13 +161,12 @@ No Ultrarrápido, escolha entre `whisper-large-v3-turbo` e `whisper-large-v3`, p
 
 - **Node.js 24** com npm
 - **Rust 1.97.1** via [rustup](https://rustup.rs/)
-- Chaves de API, conforme o pipeline:
+- Chaves de API:
 
 | Provedor | Usado em |
 |:--|:--|
-| **OpenRouter** | Obrigatório no Ultrarrápido; também aceita modelos multimodais com áudio e modelos dedicados de transcrição |
-| **Google Gemini** | Rápido e preciso, Preciso, Ultrapreciso e avaliação de pronúncia |
-| **Groq** | Preciso, Ultrapreciso, sanitizer e fallback manual |
+| **OpenRouter** | Transcrição pelo OpenRouter, Whisper de reserva, comando de voz e retrato da voz |
+| **Google Gemini** | Transcrição pelo Google AI Studio, comando de voz e avaliação de pronúncia |
 
 ### Desenvolvimento
 
@@ -211,8 +201,8 @@ Detalhes em [`BUILD.md`](BUILD.md).
 
 ### Primeiro ditado
 
-1. Abra **Configurações** e salve as chaves de API do pipeline que vai usar.
-2. Escolha um pipeline: Ultrarrápido, Rápido e preciso, Preciso ou Ultrapreciso.
+1. Abra **Ajustes › Transcrição** e salve a chave do OpenRouter (e a do Google, se for usar o AI Studio).
+2. Escolha o provedor e o modelo.
 3. Clique no campo de texto onde o texto deve chegar e aperte <kbd>Ctrl</kbd> + <kbd>B</kbd>.
 4. Fale. Aperte <kbd>Ctrl</kbd> + <kbd>B</kbd> de novo para parar: o texto é colado no campo e entra no **Histórico**.
 5. Mudou de ideia? <kbd>Ctrl</kbd> + <kbd>Q</kbd> cancela sem gerar texto.
@@ -227,8 +217,7 @@ Detalhes em [`BUILD.md`](BUILD.md).
 Tudo fica no seu computador, em `%APPDATA%\com.haumeavoice.app\`: histórico, configurações, chaves e áudios.
 
 - As chaves de API são protegidas pelo **DPAPI** da sua conta Windows; a interface recebe apenas referências opacas.
-- Escritas são atômicas, e itens removidos podem ser recuperados.
-- O contexto do navegador só é coletado mediante solicitação vigente, conforme as fontes habilitadas.
+- Escritas são atômicas; uma gravação interrompida continua disponível para retranscrever no Histórico.
 - Não há analytics externo.
 
 O identificador interno de dados mantém o nome legado para preservar sua instalação. Para migrar para a pasta Sonora com backup e verificação, siga [o procedimento Windows](docs/SONORA_2.0.md#instalação-windows).
@@ -237,42 +226,33 @@ O identificador interno de dados mantém o nome legado para preservar sua instal
 
 ## Arquitetura
 
-A orquestração vive em módulos dedicados (`transcription/`, `gemini/`, contratos e vocabulário), e a tela de **Configurações** é centrada nos pipelines de produto ativos.
-
 ```text
 src-tauri/src/
 ├── audio.rs                 captura do microfone, WAV, clipboard e paste
-├── transcription/           modos de produto, legado e telemetria
-├── gemini/                  Files API, STT, refine e pronúncia
-├── pipeline_contract.rs     TranscriptionMode, configuração e estágios
+├── transcription/           modo de produto, Whisper de reserva e telemetria
+├── gemini/                  Files API, STT e pronúncia
+├── openrouter.rs            STT e Chat Completions com áudio
+├── pipeline_contract.rs     TranscriptionMode e rota de transcrição
 ├── vocabulary.rs            termos estruturados
-├── sanitizer_json.rs        parse da saída JSON do sanitizer
-├── groq.rs                  Whisper e sanitizer
+├── assist.rs                comando de voz
+├── maintenance.rs           recuperação de gravações interrompidas
 └── history.rs · settings.rs
 
 src/views/
-├── ConfiguracoesView.tsx    pipelines, FileTagging e vocabulário
-├── HistoricoView.tsx        lista, detalhes e ações
+├── InicioView.tsx           status, atalhos e últimos ditados
+├── HistoricoView.tsx        lista, detalhes, ações e gravações interrompidas
+├── InsightsView.tsx         uso e retrato da voz
+├── ConfiguracoesView.tsx    Geral, Transcrição e Vocabulário
 └── TranscricaoView.tsx      upload de arquivo
 ```
 
 | Tela | Para quê |
 |:--|:--|
-| **Início** | Status, contadores e gravação |
-| **Transcrição** | Upload de arquivo |
-| **Histórico** | Ditados, métricas, retranscrição e pronúncia |
-| **Atalhos** | Reconfigurar gravar e cancelar |
-| **Configurações** | Pipelines, chaves, vocabulário e avançado |
+| **Início** | Status, atalhos e últimos ditados |
+| **Histórico** | Ditados, upload de arquivo, retranscrição e pronúncia |
+| **Insights** | Estatísticas de uso e retrato da voz |
+| **Ajustes** | Geral, Transcrição e Vocabulário |
 | **Gadget** | Pílula compacta, sempre no topo |
-
-| Camada | Tecnologia |
-|:--|:--|
-| Shell | Tauri 2 |
-| Interface | React 18 · TypeScript · Vite 5 · Tailwind CSS 3 |
-| Backend | Rust: captura, STT, IPC e sistema operacional |
-| Áudio | cpal (WASAPI no Windows) |
-| STT e LLM | Groq Whisper · Google Gemini · OpenRouter · whisper.cpp local (offline) |
-| Clipboard e paste | arboard · enigo |
 
 <br>
 

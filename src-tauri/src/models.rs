@@ -6,49 +6,6 @@ use std::sync::{
     Arc,
 };
 
-/// Sanitizer model selected manually by the user from the UI.
-/// Each variant maps to a cloud-hosted LLM used for semantic validation
-/// of the transcribed text before final delivery.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SanitizerModel {
-    #[serde(rename = "llama-70b")]
-    #[default]
-    Llama70b,
-    #[serde(rename = "gpt-oss-20b")]
-    GptOss20b,
-    #[serde(rename = "gpt-oss-120b")]
-    GptOss120b,
-    #[serde(rename = "qwen3-27b")]
-    Qwen327b,
-}
-
-impl SanitizerModel {
-    /// Maps the user-facing enum variant to the exact model string
-    /// expected by the Groq / OpenAI Chat Completions endpoint.
-    ///
-    /// The GPT-OSS models are published on GroqCloud under the `openai/`
-    /// namespace; the bare `gpt-oss-*` ids return `model_not_found`, which
-    /// would silently fall the pipeline back to the raw transcription.
-    pub fn api_model_id(&self) -> &'static str {
-        match self {
-            Self::Llama70b => "llama-3.3-70b-versatile",
-            Self::GptOss20b => "openai/gpt-oss-20b",
-            Self::GptOss120b => "openai/gpt-oss-120b",
-            Self::Qwen327b => "qwen/qwen3.6-27b",
-        }
-    }
-
-    /// Whether this model honours Groq's native `reasoning_effort` request
-    /// parameter. Only the GPT-OSS family accepts `low`/`medium`/`high`;
-    /// LLaMA 3.3 70B and the Qwen 3.6 27B preview model on Groq have no
-    /// documented native reasoning control we can safely send, so enabling
-    /// reasoning for them is a no-op (and sending the parameter would risk
-    /// an API rejection that silently falls the pipeline back to raw text).
-    pub fn supports_reasoning(&self) -> bool {
-        matches!(self, Self::GptOss20b | Self::GptOss120b)
-    }
-}
-
 /// Rectangle of the gadget overlay's *visible pill*, reported by the frontend
 /// in logical pixels relative to the gadget window's top-left corner.
 ///
@@ -332,42 +289,6 @@ pub struct GadgetSessionAnchor {
     pub scale: f64,
 }
 
-/// Active transcription engine selected manually by the user from the UI.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum TranscriptionEngine {
-    #[default]
-    GroqWhisper,
-    DeepgramNova3,
-    GeminiMultimodal,
-}
-
-/// Deepgram delivery mode. Controls how audio is sent to Deepgram when the
-/// Nova-3 engine is selected (including dual-engine mode).
-///
-/// * [`Batch`] — classic REST upload of the complete file (current default).
-/// * [`StreamingFinal`] — WebSocket streaming with `interim_results=false`;
-///   only the final transcript is returned after the full audio has been
-///   pushed (no partials reach the UI). Processing starts incrementally as
-///   chunks arrive, typically reducing time-to-final vs batch.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeepgramMode {
-    #[default]
-    Batch,
-    StreamingFinal,
-}
-
-impl DeepgramMode {
-    /// Wire-stable identifier used in logs and UI (`"batch"` / `"streaming_final"`).
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Batch => "batch",
-            Self::StreamingFinal => "streaming_final",
-        }
-    }
-}
-
 /// API keys for the supported cloud engines. Held in memory (RAM) for the
 /// running session and also persisted to `api_keys.json` in the app data
 /// directory (see the `secrets` module) so they survive an app restart.
@@ -481,28 +402,6 @@ mod api_keys_tests {
     }
 }
 
-/// Payload received from the frontend when the user changes the active
-/// engine and sanitizer model in the settings screen.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EngineConfigPayload {
-    pub engine: TranscriptionEngine,
-    pub sanitizer: SanitizerModel,
-    #[serde(default)]
-    pub dual_engine: bool,
-    #[serde(default)]
-    pub reasoning_enabled: bool,
-    #[serde(default = "default_reasoning_effort")]
-    pub reasoning_effort: String,
-    /// Deepgram transport mode (`batch` | `streaming_final`). Defaults to
-    /// batch so older frontends that omit the field keep working.
-    #[serde(default)]
-    pub deepgram_mode: DeepgramMode,
-}
-
-fn default_reasoning_effort() -> String {
-    "medium".to_string()
-}
-
 /// User-customisable global recording shortcuts. Persisted to
 /// `shortcuts.json` in the app data directory and re-registered with the
 /// global-shortcut plugin whenever the user rebinds them. Strings use the
@@ -569,8 +468,6 @@ pub struct ApiKeysPayload {
 pub static CONFIG_LOCK: parking_lot::ReentrantMutex<()> = parking_lot::ReentrantMutex::new(());
 
 pub struct AppState {
-    pub engine: RwLock<TranscriptionEngine>,
-    pub sanitizer: RwLock<SanitizerModel>,
     pub recording: RwLock<bool>,
     recording_lifecycle: Mutex<RecordingLifecycle>,
     pub operations: Arc<crate::operations::Coordinator>,
@@ -597,7 +494,6 @@ pub struct AppState {
     /// elapsed time so the timer survives navigating between views. `None`
     /// while idle.
     pub recording_since: Mutex<Option<std::time::Instant>>,
-    pub system_prompt: RwLock<String>,
     /// Legacy mirror kept for compatibility with older IPC clients. New code
     /// uses `widget_visibility_mode` exclusively.
     pub compact_mode: RwLock<bool>,
@@ -618,22 +514,6 @@ pub struct AppState {
     /// announced to the UI via the `transcription-saved` event without
     /// needing access to an `AppHandle` injection site.
     pub app_handle: RwLock<Option<tauri::AppHandle>>,
-    pub dual_engine: RwLock<bool>,
-    pub reasoning_enabled: RwLock<bool>,
-    /// Deepgram transport: REST batch vs WebSocket streaming (final only).
-    /// Persisted to `settings.json`. Only used when Deepgram is in the path.
-    pub deepgram_mode: RwLock<DeepgramMode>,
-    /// Live Deepgram WebSocket session (streaming_final + mic). Opened when
-    /// recording starts and finished/aborted when recording stops/cancels.
-    /// `None` while idle or in batch mode.
-    /// When `true` (default), the acoustic transcription is passed through the
-    /// Groq Chat Completions sanitizer (Stage 2) for orthographic cleanup and
-    /// formatting. When `false`, the **raw** acoustic transcription is copied
-    /// to the clipboard / pasted directly, skipping the sanitization round-
-    /// trip entirely — useful when the user wants unmodified output or wants
-    /// to save the extra network call. Persisted to `settings.json`.
-    pub sanitizer_enabled: RwLock<bool>,
-    pub reasoning_effort: RwLock<String>,
     /// Structured vocabulary (canonical, aliases, category, strict, enabled).
     /// Persisted to `settings.json`; legacy `custom_words` is migrated on load.
     pub vocabulary: RwLock<Vec<crate::vocabulary::VocabularyTerm>>,
@@ -641,33 +521,17 @@ pub struct AppState {
     /// until the gadget reports for the first time. Consumed by the cursor
     /// watcher to make the overlay click-through outside the pill.
     pub gadget_hit_rect: RwLock<Option<GadgetHitRect>>,
-    /// Compatibility flag kept for persisted settings and older frontends.
-    /// Product pipelines are always active in the current application.
-    pub modes_enabled: RwLock<bool>,
-    /// Selected product mode (UltraFast / FastAccurate / …).
-    pub transcription_mode: RwLock<crate::pipeline_contract::TranscriptionMode>,
-    /// FastAccurate: if Gemini fails or is unavailable, fall back to Whisper.
-    pub gemini_fallback_to_whisper: RwLock<bool>,
-    /// Adds plain `@file.ext` mentions when Gemini recognizes an explicit file reference.
-    pub file_tagging_enabled: RwLock<bool>,
     pub gemini_pipelines: RwLock<crate::pipeline_contract::GeminiPipelineConfig>,
-    /// Privacy policy and source toggles used to capture a best-effort context
-    /// snapshot at the exact start of each recording.
-    pub context_preferences: RwLock<crate::context::ContextPreferences>,
     pub smart_context_config: RwLock<crate::smart_context::Config>,
     pub smart_context_task: Mutex<Option<crate::smart_context::Pending>>,
     pub smart_context_output: RwLock<Option<crate::smart_context::Prepared>>,
     /// Immutable session snapshot consumed by the transcription and delivery
     /// stages after recording stops.
     pub recording_session: Mutex<Option<crate::pipeline_run::RecordingSession>>,
-    pub output_profiles: RwLock<Vec<crate::output_policy::OutputProfile>>,
-    pub formatting_level: RwLock<crate::output_policy::FormattingLevel>,
-    pub dictation_destination: RwLock<crate::output_policy::DictationDestination>,
     pub features: RwLock<crate::assist::FeatureSettings>,
     /// Set when the current recording was started by the voice-command shortcut:
     /// the transcript becomes an instruction applied to this selection.
     pub command_request: Mutex<Option<CommandRequest>>,
-    pub temporary_profile_override: RwLock<Option<String>>,
     /// Failure journal handed from provider orchestration to history when a
     /// top-level Result must remain backward-compatible with `String` errors.
     pub pending_failed_pipeline_run: Mutex<Option<crate::pipeline_run::PipelineRun>>,
@@ -681,8 +545,6 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         Self {
-            engine: RwLock::new(TranscriptionEngine::default()),
-            sanitizer: RwLock::new(SanitizerModel::default()),
             recording: RwLock::new(false),
             recording_lifecycle: Mutex::new(RecordingLifecycle::default()),
             operations: Arc::new(crate::operations::Coordinator::default()),
@@ -698,7 +560,6 @@ impl AppState {
             test_lease: Mutex::new(None),
             capture_rate: RwLock::new(16_000),
             recording_since: Mutex::new(None),
-            system_prompt: RwLock::new(String::new()),
             compact_mode: RwLock::new(false),
             widget_visibility_mode: RwLock::new(WidgetVisibilityMode::Auto),
             widget_dock: RwLock::new(WidgetDock::Bottom),
@@ -708,31 +569,15 @@ impl AppState {
             gadget_rendered_generation: AtomicU64::new(0),
             shortcuts: RwLock::new(ShortcutConfig::default()),
             app_handle: RwLock::new(None),
-            dual_engine: RwLock::new(false),
-            reasoning_enabled: RwLock::new(false),
-            deepgram_mode: RwLock::new(DeepgramMode::default()),
-            sanitizer_enabled: RwLock::new(true),
-            reasoning_effort: RwLock::new("medium".to_string()),
             vocabulary: RwLock::new(Vec::new()),
             gadget_hit_rect: RwLock::new(None),
-            modes_enabled: RwLock::new(true),
-            transcription_mode: RwLock::new(crate::pipeline_contract::TranscriptionMode::UltraFast),
-            gemini_fallback_to_whisper: RwLock::new(true),
-            file_tagging_enabled: RwLock::new(true),
             gemini_pipelines: RwLock::new(crate::pipeline_contract::GeminiPipelineConfig::default()),
-            context_preferences: RwLock::new(crate::context::ContextPreferences::default()),
             smart_context_config: RwLock::new(crate::smart_context::Config::default()),
             smart_context_task: Mutex::new(None),
             smart_context_output: RwLock::new(None),
             recording_session: Mutex::new(None),
-            output_profiles: RwLock::new(Vec::new()),
-            formatting_level: RwLock::new(crate::output_policy::FormattingLevel::default()),
             features: RwLock::new(crate::assist::FeatureSettings::default()),
             command_request: Mutex::new(None),
-            dictation_destination: RwLock::new(
-                crate::output_policy::DictationDestination::default(),
-            ),
-            temporary_profile_override: RwLock::new(None),
             pending_failed_pipeline_run: Mutex::new(None),
             groq_key_cursor: Arc::new(AtomicUsize::new(0)),
             google_key_cursor: Arc::new(AtomicUsize::new(0)),
@@ -775,31 +620,13 @@ impl AppState {
         snapshot.openrouter_key_cursor = self.openrouter_key_cursor.clone();
         snapshot.meta_key_cursor = self.meta_key_cursor.clone();
         snapshot.operations = self.operations.clone();
-        *snapshot.engine.write() = *self.engine.read();
-        *snapshot.sanitizer.write() = *self.sanitizer.read();
         *snapshot.api_keys.write() = self.api_keys.read().clone();
-        *snapshot.system_prompt.write() = self.system_prompt.read().clone();
         *snapshot.app_handle.write() = self.app_handle.read().clone();
-        *snapshot.dual_engine.write() = *self.dual_engine.read();
-        *snapshot.deepgram_mode.write() = *self.deepgram_mode.read();
-        *snapshot.sanitizer_enabled.write() = *self.sanitizer_enabled.read();
-        *snapshot.reasoning_enabled.write() = *self.reasoning_enabled.read();
-        *snapshot.reasoning_effort.write() = self.reasoning_effort.read().clone();
         *snapshot.vocabulary.write() = self.vocabulary.read().clone();
-        *snapshot.modes_enabled.write() = *self.modes_enabled.read();
-        *snapshot.transcription_mode.write() = *self.transcription_mode.read();
-        *snapshot.gemini_fallback_to_whisper.write() = *self.gemini_fallback_to_whisper.read();
-        *snapshot.file_tagging_enabled.write() = *self.file_tagging_enabled.read();
         *snapshot.gemini_pipelines.write() = self.gemini_pipelines.read().clone();
-        *snapshot.context_preferences.write() = self.context_preferences.read().clone();
         *snapshot.smart_context_config.write() = self.smart_context_config.read().clone();
         *snapshot.smart_context_output.write() = self.smart_context_output.read().clone();
-        *snapshot.output_profiles.write() = self.output_profiles.read().clone();
-        *snapshot.formatting_level.write() = *self.formatting_level.read();
-        *snapshot.dictation_destination.write() = *self.dictation_destination.read();
         *snapshot.features.write() = self.features.read().clone();
-        *snapshot.temporary_profile_override.write() =
-            self.temporary_profile_override.read().clone();
         *snapshot.recording_session.lock() = self.recording_session.lock().clone();
         Arc::new(snapshot)
     }
@@ -946,11 +773,6 @@ impl AppState {
             .lock()
             .map(|t| t.elapsed().as_millis() as u64)
             .unwrap_or(0)
-    }
-
-    /// Returns a snapshot of the active engine.
-    pub fn active_engine(&self) -> TranscriptionEngine {
-        *self.engine.read()
     }
 
     /// Empties the in-memory sample buffer. Called both when a new

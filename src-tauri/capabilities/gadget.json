@@ -17,7 +17,6 @@
     "allow-toggle-recording-state",
     "allow-cancel-recording",
     "allow-retry-transcription",
-    "allow-retry-transcription-with-fallback",
     "allow-set-gadget-visual-state",
     "allow-acknowledge-gadget-rendered"
   ]

@@ -78,25 +78,6 @@ pub struct TranscribeRequest {
     pub duration_ms: Option<u64>,
     /// Glossary block for FastAccurate (strict terms + aliases).
     pub glossary_block: String,
-    /// Enables prompt-only `@file.ext` mentions in clear coding contexts.
-    pub file_tagging_enabled: bool,
     /// Native custom vocabulary terms for dedicated speech models (acoustic biasing).
     pub custom_vocabulary: Vec<String>,
-    /// Explicitly authorized, delimited context. Always treated as untrusted
-    /// data by the prompt and omitted unless both privacy opt-ins are active.
-    pub untrusted_context: Option<String>,
-}
-
-/// Input for audio + draft text refinement.
-#[derive(Debug, Clone)]
-pub struct RefineRequest {
-    pub audio_bytes: Vec<u8>,
-    pub ext: String,
-    pub api_key: String,
-    pub display_name: String,
-    /// Draft from Whisper (and optionally other acoustics).
-    pub draft_text: String,
-    pub duration_ms: Option<u64>,
-    pub glossary_block: String,
-    pub file_tagging_enabled: bool,
 }

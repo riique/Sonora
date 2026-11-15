@@ -184,36 +184,6 @@ pub fn resolve(
         })
         .collect()
 }
-/// Preserve obsolete private data as a verified, user-bound encrypted recovery copy.
-pub fn archive_private_file(
-    source: &std::path::Path,
-    destination: &std::path::Path,
-) -> Result<(), String> {
-    use std::io::Write;
-    let mut plain = fs::read(source).map_err(|e| e.to_string())?;
-    let result = (|| {
-        let encrypted = crypt(&plain, true)?;
-        let mut file = fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(destination)
-            .map_err(|e| e.to_string())?;
-        file.write_all(&encrypted)
-            .and_then(|_| file.sync_all())
-            .map_err(|e| e.to_string())?;
-        drop(file);
-        let mut verified = crypt(&fs::read(destination).map_err(|e| e.to_string())?, false)?;
-        let matches = verified == plain;
-        verified.fill(0);
-        if !matches {
-            return Err("A cópia protegida não passou na verificação".into());
-        }
-        fs::remove_file(source).map_err(|e| e.to_string())
-    })();
-    plain.fill(0);
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,25 +206,5 @@ mod tests {
         let mut altered = encrypted;
         altered[0] ^= 1;
         assert!(crypt(&altered, false).is_err());
-    }
-    #[cfg(windows)]
-    #[test]
-    fn private_archive_is_verified_before_original_is_removed() {
-        let root =
-            std::env::temp_dir().join(format!("sonora-private-archive-{}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
-        let source = root.join("old.json");
-        let target = root.join("recovery.dpapi");
-        fs::write(&source, b"synthetic private context").unwrap();
-        archive_private_file(&source, &target).unwrap();
-        assert!(!source.exists());
-        assert_eq!(
-            crypt(&fs::read(&target).unwrap(), false).unwrap(),
-            b"synthetic private context"
-        );
-        fs::write(&source, b"new synthetic context").unwrap();
-        assert!(archive_private_file(&source, &target).is_err());
-        assert!(source.exists());
-        fs::remove_dir_all(root).unwrap();
     }
 }

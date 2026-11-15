@@ -1,21 +1,15 @@
-//! Transcription orchestration: product modes, the shared Groq sanitizer,
+//! Transcription orchestration: the product mode, the Whisper backup,
 //! history entry helpers and telemetry. Capture/WAV/clipboard live in `audio.rs`.
 
-pub mod fallback;
 pub mod legacy;
 pub mod modes;
 pub mod pipeline;
 pub mod telemetry;
-pub mod types;
 
 pub use crate::pipeline_run::PipelineRun;
-pub use fallback::{coalesce_empty_final, pick_raw_acoustic};
-pub use legacy::{transcribe_groq_whisper, transcribe_whisper_fallback_via_openrouter};
-pub use modes::{
-    mode_failed_history, mode_result_to_history, run_product_mode, run_product_mode_with_duration,
-};
-pub use pipeline::{emit_saved, run_sanitize, update_failed_entry};
-pub use types::SanitizeOutcome;
+pub use legacy::transcribe_whisper_fallback_via_openrouter;
+pub use modes::{mode_failed_history, mode_result_to_history, run_product_mode_with_duration};
+pub use pipeline::{emit_saved, update_failed_entry};
 
 const KNOWN_TRANSCRIPTION_ARTIFACTS: &[&str] = &["Legenda por Sônia Ruberti"];
 

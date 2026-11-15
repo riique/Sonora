@@ -40,23 +40,6 @@ pub fn effective_directory() -> Option<PathBuf> {
         .or_else(default_directory)
 }
 
-/// Validates and creates a user-selected audio directory without moving any
-/// existing files. Returns the canonical absolute path persisted in settings.
-pub fn prepare_custom_directory(path: &str) -> Result<PathBuf, String> {
-    let candidate = PathBuf::from(path.trim());
-    if !candidate.is_absolute() {
-        return Err("Selecione uma pasta com caminho absoluto.".to_string());
-    }
-    fs::create_dir_all(&candidate)
-        .map_err(|e| format!("Não foi possível criar a pasta de áudio: {e}"))?;
-    if !candidate.is_dir() {
-        return Err("O local selecionado não é uma pasta.".to_string());
-    }
-    candidate
-        .canonicalize()
-        .map_err(|e| format!("Não foi possível validar a pasta de áudio: {e}"))
-}
-
 fn lock() -> &'static Mutex<()> {
     AUDIO_LOCK.get_or_init(|| Mutex::new(()))
 }
@@ -187,11 +170,6 @@ mod tests {
         assert_eq!(sanitize_ext(".WAV"), "wav");
         assert_eq!(sanitize_ext("../../mp3"), "mp3");
         assert_eq!(sanitize_ext(""), "bin");
-    }
-
-    #[test]
-    fn custom_directory_must_be_absolute() {
-        assert!(prepare_custom_directory("relative/audio").is_err());
     }
 
     #[test]

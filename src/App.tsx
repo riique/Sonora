@@ -32,7 +32,7 @@ export default function App() {
         <div key={view} className="page-shell animate-fade-in">
           <div className={view === "ajustes" ? "" : "max-w-[784px]"}>
           {view === "inicio" && <InicioView onNavigate={navigate} onAir={onAir} />}
-          {view === "historico" && <HistoricoView onNavigate={navigate} />}
+          {view === "historico" && <HistoricoView />}
           {view === "insights" && <InsightsView />}
           {view === "ajustes" && <ConfiguracoesView tab={settingsTab} onTabChange={setSettingsTab} />}
           </div>

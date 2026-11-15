@@ -16,8 +16,8 @@ function shortPortrait(text: string) {
   return first && first.length <= 360 ? first : `${text.slice(0, 300).replace(/\s+\S*$/, "")}…`;
 }
 
-export function VoiceInsights({ data, reload, developerMode }: {
-  data: InsightsResponse; reload: () => Promise<void>; developerMode: boolean;
+export function VoiceInsights({ data, reload }: {
+  data: InsightsResponse; reload: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -140,7 +140,6 @@ export function VoiceInsights({ data, reload, developerMode }: {
           </dl></details>}
         </section>
         {data.language.fillers.length > 0 && <section><h3>Palavras de apoio</h3><p className="mt-2 text-[13px] text-muted">Expressões que acompanham sua fala. Não são erros.</p><dl className="voice-facts">{data.language.fillers.map((item) => <Fact key={item.phrase} label={`“${item.phrase}”`} value={`${number(item.per_1000_words, 1)} a cada mil palavras`} />)}</dl></section>}
-        {developerMode && <details><summary>Diagnóstico técnico</summary><pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap wrap-break-word text-[11px]">{JSON.stringify({ audio, evidence, profile, generation: data.profile_generation }, null, 2)}</pre></details>}
       </div>
     </details>
 

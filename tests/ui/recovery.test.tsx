@@ -6,8 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (name: string, callback: (event: unknown) => void) => { bridge.listeners.set(name, callback); return () => bridge.listeners.delete(name); }) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open, save: vi.fn() }));
 vi.mock("@tauri-apps/api/webview", () => ({ getCurrentWebview: () => ({ onDragDropEvent: async (callback: (event: unknown) => void) => { bridge.drop = callback; return () => { bridge.drop = undefined; }; } }) }));
-import { ScratchpadView } from "../../src/views/ScratchpadView";
-import { IntelligenceSettings } from "../../src/views/IntelligenceSettings";
+import { InterruptedAudio } from "../../src/views/RecoveryView";
 import { TranscricaoView } from "../../src/views/TranscricaoView";
 import { InicioView } from "../../src/views/InicioView";
 let host: HTMLDivElement;
@@ -37,43 +36,35 @@ test("file dialog failure becomes visible", async () => {
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-describedby="upload-formats"]')!.click());
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("synthetic dialog failure");
 });
-test("home renders the persisted clipboard destination with labeled quick controls", async () => {
+test("home shows the single transcription route and quick shortcuts", async () => {
   bridge.invoke.mockImplementation(async (command: string) => ({
     get_history_page: { items: [], total: 0, total_words: 0 },
-    get_mode_config: { mode: "ultra-fast", gemini_pipelines: { ultra_fast_whisper: "large-v3" } },
-    get_output_policy_config: { formatting_level: "smart", destination: "clipboard_only", profiles: [], temporary_override: null },
+    get_transcription_route: { provider: "open-router", model: "transcribe35" },
     get_shortcuts: { toggle: "Control+B", cancel: "Control+Q" },
     get_recording_status: { phase: "idle", recording: false, revision: 0 },
   }[command]));
   await act(async () => root.render(<InicioView onNavigate={() => {}} />));
-  const controls = host.querySelectorAll("select");
-  expect(controls[0].value).toBe("clipboard_only");
-  for (const control of controls) expect(control.closest("label")?.textContent).toBeTruthy();
-  expect(host.textContent).toContain("Ultrarrápido");
+  expect(host.querySelectorAll("select")).toHaveLength(0);
+  expect(host.textContent).toContain("Gemini 3.5 Transcribe via OpenRouter");
   expect(host.textContent).toContain("Pronto para ditar");
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
-test("initial preference failure exposes an actionable error instead of permanent loading", async () => {
-  bridge.invoke.mockRejectedValue(new Error("synthetic storage failure"));
-  await act(async () => root.render(<IntelligenceSettings />));
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Não foi possível carregar");
-  expect(host.textContent).toContain("Recarregar preferências");
+test("interrupted recordings stay hidden when there is nothing to recover", async () => {
+  bridge.invoke.mockImplementation(async (name: string) => { if (name === "list_recovery_audio") return []; throw new Error(`Unexpected command: ${name}`); });
+  await act(async () => root.render(<InterruptedAudio />));
+  expect(host.textContent).toBe("");
 });
-test("scratchpad refreshes after a saved dictation and reports clipboard failure", async () => {
-  let notes: unknown[] = [];
-  bridge.invoke.mockImplementation(async (name: string) => { if (name === "get_scratchpad_notes") return notes; throw new Error(`Unexpected command: ${name}`); });
-  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("clipboard busy")) } });
-  await act(async () => root.render(<ScratchpadView />));
-  expect(host.textContent).toContain("Nenhuma nota rápida");
-  notes = [{ id: "synthetic-note", text: "Nota de teste", created_at_ms: 1 }];
-  await act(async () => { bridge.listeners.get("transcription-saved")?.({}); });
-  expect(host.textContent).toContain("Nota de teste");
-  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Copiar nota"]')!.click());
-  expect(host.textContent).toContain("Não foi possível copiar");
-});
-test("scratchpad load failure is visible and preserves a retry action", async () => {
-  bridge.invoke.mockRejectedValue(new Error("synthetic read failure"));
-  await act(async () => root.render(<ScratchpadView />));
-  expect(host.textContent).toContain("Não foi possível carregar as notas");
-  expect(host.textContent).toContain("Atualizar notas");
+test("interrupted recordings can be retranscribed from the history", async () => {
+  let pending = [{ id: "recovery-synthetic", bytes: 2 * 1048576 }];
+  bridge.invoke.mockImplementation(async (name: string) => {
+    if (name === "list_recovery_audio") return pending;
+    if (name === "retry_recovery_audio") { pending = []; return "texto"; }
+    throw new Error(`Unexpected command: ${name}`);
+  });
+  const recovered = vi.fn();
+  await act(async () => root.render(<InterruptedAudio onRecovered={recovered} />));
+  expect(host.textContent).toContain("1 gravação interrompida");
+  await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Retranscrever")!.click());
+  expect(recovered).toHaveBeenCalled();
+  expect(bridge.invoke.mock.calls.some(([name]) => name === "retry_recovery_audio")).toBe(true);
 });

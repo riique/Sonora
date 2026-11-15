@@ -2,8 +2,8 @@
 
 ## Configuração
 
-1. Em **Ajustes → Transcrição**, escolha **Rápido e preciso**, **Preciso** ou **Ultrapreciso**.
-2. Selecione **OpenRouter**, **ID customizado** e `assemblyai/universal-3-6-pro`.
+1. Em **Ajustes → Transcrição**, escolha o provedor **OpenRouter**.
+2. Em **Modelo**, selecione **AssemblyAI Universal-3.6 Pro** (`assemblyai/universal-3-6-pro`).
 3. O Sonora passa a encaminhar a grafia canônica dos termos habilitados do vocabulário ao `keyterms_prompt` (até 100 termos). A regra de literais continua no pós-processamento.
 4. Em **Contexto inteligente**, ative o recurso se desejar compartilhar uma imagem da janela em foco e até cinco ou dez transcrições anteriores com um modelo visual. O padrão é `nex-agi/nex-n2.5-mini`, mas aceita outro ID multimodal da OpenRouter.
 

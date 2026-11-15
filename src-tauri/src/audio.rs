@@ -251,29 +251,17 @@ pub fn start_capture(
         }
     };
 
-    let context_preferences = state.context_preferences.read().clone();
-    let context = crate::context::capture(&context_preferences);
-    let global_formatting_level = *state.formatting_level.read();
-    let destination = *state.dictation_destination.read();
-    let profiles = state.output_profiles.read().clone();
-    let temporary_override = state.temporary_profile_override.read().clone();
-    let mut profile = crate::output_policy::resolve_output_profile(
-        &profiles,
-        &context,
-        temporary_override.as_deref(),
-        global_formatting_level,
-    );
-    profile.allow_context_to_cloud &= context_preferences.allow_context_to_cloud;
-    let formatting_level = profile.formatting_level;
+    let context = crate::context::capture(&crate::context::ContextPreferences::default());
+    let profile = crate::output_policy::ResolvedOutputProfile::default();
     let screenshot_hwnd = context.foreground_hwnd;
     let pending_session = crate::pipeline_run::RecordingSession {
         id: session_id.to_string(),
         started_at_ms,
         delivery_target: crate::context::ForegroundTarget::from_snapshot(&context),
         context,
+        formatting_level: profile.formatting_level,
         profile,
-        formatting_level,
-        destination,
+        destination: crate::output_policy::DictationDestination::FocusedField,
     };
 
     if !state.install_recording_capture(generation, fresh_stream, pending_session) {
@@ -564,7 +552,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
     let audio_prepare_ms = audio_prepare_started.elapsed().as_millis() as u64;
 
     {
-        let mode = *state.transcription_mode.read();
+        let mode = crate::pipeline_contract::TranscriptionMode::FastAccurate;
         crate::pipeline_run::emit_pipeline_progress(
             state,
             crate::pipeline_run::PipelineProgressEvent {
@@ -832,16 +820,6 @@ async fn deliver_pipeline_result(state: &AppState, run: &mut crate::pipeline_run
         ..Default::default()
     };
     let outcome = match run.destination {
-        DictationDestination::Scratchpad => {
-            match crate::scratchpad::add(text.clone(), Some(run.id.clone()), run.profile_id.clone())
-            {
-                Ok(note) => {
-                    delivery.scratchpad_note_id = Some(note.id);
-                    Ok(())
-                }
-                Err(error) => Err(error),
-            }
-        }
         DictationDestination::ClipboardOnly => {
             let clipboard_started = std::time::Instant::now();
             let result = write_clipboard(&text, state.operations.permit()).await;
@@ -849,7 +827,7 @@ async fn deliver_pipeline_result(state: &AppState, run: &mut crate::pipeline_run
             delivery.clipboard_ok = result.is_ok();
             result
         }
-        DictationDestination::FocusedField => {
+        DictationDestination::FocusedField | DictationDestination::Scratchpad => {
             let clipboard_started = std::time::Instant::now();
             let result = write_clipboard(&text, state.operations.permit()).await;
             run.timings.clipboard_ms = Some(clipboard_started.elapsed().as_millis() as u64);
@@ -944,7 +922,7 @@ pub async fn undo_ai_edit(
     .ok_or("Versão solicitada não está disponível")?
     .to_string();
 
-    let mut preferences = state.context_preferences.read().clone();
+    let mut preferences = crate::context::ContextPreferences::default();
     if let Some(selection) = preferences
         .sources
         .iter_mut()
@@ -977,14 +955,6 @@ pub async fn retry_transcription_handler(
     state: &Arc<AppState>,
     id: &str,
 ) -> Result<String, String> {
-    retry_transcription_handler_with_strategy(state, id, false).await
-}
-
-pub async fn retry_transcription_handler_with_strategy(
-    state: &Arc<AppState>,
-    id: &str,
-    force_fallback: bool,
-) -> Result<String, String> {
     let kind = if crate::history::get(id).is_some_and(|entry| entry.source == "mic") {
         "retry-mic"
     } else {
@@ -993,13 +963,12 @@ pub async fn retry_transcription_handler_with_strategy(
     let lease = state.operations.begin(kind)?;
     tokio::select! { biased;
         _ = lease.cancelled() => Err("Retranscrição cancelada. O áudio foi preservado.".into()),
-        result = retry_transcription_handler_with_strategy_inner(state, id, force_fallback) => result,
+        result = retry_transcription_handler_inner(state, id) => result,
     }
 }
-async fn retry_transcription_handler_with_strategy_inner(
+async fn retry_transcription_handler_inner(
     state: &Arc<AppState>,
     id: &str,
-    force_fallback: bool,
 ) -> Result<String, String> {
     emit_transcribing(state, true);
 
@@ -1044,7 +1013,7 @@ async fn retry_transcription_handler_with_strategy_inner(
     log::info!("audio: retrying transcription for {}", id);
 
     {
-        let mode = *state.transcription_mode.read();
+        let mode = crate::pipeline_contract::TranscriptionMode::FastAccurate;
         struct RetrySessionGuard(Arc<AppState>, bool);
         impl Drop for RetrySessionGuard {
             fn drop(&mut self) {
@@ -1059,15 +1028,7 @@ async fn retry_transcription_handler_with_strategy_inner(
                 .last()
                 .map(|run| run.context.clone())
                 .unwrap_or_default();
-            let profiles = state.output_profiles.read().clone();
-            let level = *state.formatting_level.read();
-            let override_id = state.temporary_profile_override.read().clone();
-            let profile = crate::output_policy::resolve_output_profile(
-                &profiles,
-                &context,
-                override_id.as_deref(),
-                level,
-            );
+            let profile = crate::output_policy::ResolvedOutputProfile::default();
             *state.recording_session.lock() = Some(crate::pipeline_run::RecordingSession {
                 id: format!("retry-session-{}", crate::pipeline_run::epoch_ms()),
                 started_at_ms: crate::pipeline_run::epoch_ms(),
@@ -1075,26 +1036,22 @@ async fn retry_transcription_handler_with_strategy_inner(
                 context,
                 formatting_level: profile.formatting_level,
                 profile,
-                destination: *state.dictation_destination.read(),
+                destination: crate::output_policy::DictationDestination::FocusedField,
             });
             true
         } else {
             false
         };
         let _retry_session_guard = RetrySessionGuard(state.clone(), installed_session);
-        let run = if force_fallback {
-            run_forced_fallback(state, &entry, bytes, mime).await
-        } else {
-            crate::transcription::run_product_mode_with_duration(
-                state,
-                bytes,
-                "audio.wav",
-                mime,
-                &ext,
-                None,
-            )
-            .await
-        };
+        let run = crate::transcription::run_product_mode_with_duration(
+            state,
+            bytes,
+            "audio.wav",
+            mime,
+            &ext,
+            None,
+        )
+        .await;
         match run {
             Ok(mut result) => {
                 if result.id.is_empty() {
@@ -1135,127 +1092,6 @@ async fn retry_transcription_handler_with_strategy_inner(
             }
         }
     }
-}
-
-async fn run_forced_fallback(
-    state: &Arc<AppState>,
-    entry: &crate::models::HistoryEntry,
-    bytes: Vec<u8>,
-    mime: &str,
-) -> Result<crate::pipeline_run::PipelineRun, String> {
-    use crate::pipeline_run::{
-        AttemptResultMetadata, AttemptStatus, AudioTransport, FallbackRecord, ProviderAttempt,
-    };
-    let prior = entry.pipeline_runs.last();
-    let already_used = prior
-        .into_iter()
-        .flat_map(|run| run.attempts.iter())
-        .map(|attempt| attempt.provider.to_ascii_lowercase())
-        .collect::<std::collections::HashSet<_>>();
-    let _ = already_used;
-    let (provider, model, transport) =
-        ("groq", "whisper-large-v3-turbo", AudioTransport::Multipart);
-    crate::pipeline_run::emit_pipeline_progress(
-        state,
-        crate::pipeline_run::PipelineProgressEvent {
-            kind: crate::pipeline_run::PipelineProgressKind::FallbackStarted,
-            provider: prior
-                .and_then(|run| run.attempts.last())
-                .map(|attempt| attempt.provider.clone()),
-            fallback_provider: Some(provider.into()),
-            message: Some(format!("Usando fallback {provider}")),
-            ..Default::default()
-        },
-    );
-    let started_at_ms = crate::pipeline_run::epoch_ms();
-    let started = std::time::Instant::now();
-    let text_result =
-        crate::transcription::transcribe_groq_whisper(state, bytes, "audio.wav", mime).await;
-    let duration_ms = started.elapsed().as_millis() as u64;
-    let text = match text_result {
-        Ok(text) => text,
-        Err(error) => {
-            let mut failed = crate::pipeline_run::PipelineRun::hard_error(
-                "",
-                prior
-                    .map(|run| run.mode)
-                    .unwrap_or(*state.transcription_mode.read()),
-                error.clone(),
-            );
-            failed.attempts.push(ProviderAttempt {
-                id: format!("forced-{provider}-{started_at_ms}"),
-                provider: provider.into(),
-                model: model.into(),
-                transport,
-                started_at_ms,
-                duration_ms: Some(duration_ms),
-                status: AttemptStatus::Failed,
-                error: Some(crate::pipeline_run::PipelineError {
-                    kind: crate::pipeline_run::PipelineErrorKind::Provider,
-                    code: "manual_fallback_failed".into(),
-                    message: error.clone(),
-                    retryable: true,
-                }),
-                ..Default::default()
-            });
-            failed.fallback = FallbackRecord {
-                used: true,
-                forced: true,
-                reason: Some("manual_fallback_failed".into()),
-                from_provider: prior
-                    .and_then(|run| run.attempts.last())
-                    .map(|attempt| attempt.provider.clone()),
-                to_provider: Some(provider.into()),
-            };
-            *state.pending_failed_pipeline_run.lock() = Some(failed);
-            return Err(error);
-        }
-    };
-    let mut run = crate::pipeline_run::PipelineRun {
-        mode: prior
-            .map(|run| run.mode)
-            .unwrap_or(*state.transcription_mode.read()),
-        final_text: text.clone(),
-        whisper_text: Some(text.clone()),
-        model: model.into(),
-        history_engine_label: format!("forced-fallback/{provider}"),
-        attempts: vec![ProviderAttempt {
-            id: format!("forced-{provider}-{started_at_ms}"),
-            provider: provider.into(),
-            model: model.into(),
-            transport,
-            started_at_ms,
-            duration_ms: Some(duration_ms),
-            status: AttemptStatus::Success,
-            result: AttemptResultMetadata {
-                output_chars: Some(text.len()),
-                ..Default::default()
-            },
-            ..Default::default()
-        }],
-        fallback: FallbackRecord {
-            used: true,
-            forced: true,
-            reason: Some("manual_fallback".into()),
-            from_provider: prior
-                .and_then(|run| run.attempts.last())
-                .map(|attempt| attempt.provider.clone()),
-            to_provider: Some(provider.into()),
-        },
-        used_fallback: true,
-        fallback_reason: Some("manual_fallback".into()),
-        transcription_latency_ms: duration_ms,
-        ..Default::default()
-    };
-    if let Some(prior) = prior {
-        run.context = prior.context.clone();
-        run.profile_id = prior.profile_id.clone();
-        run.formatting_level = prior.formatting_level;
-        run.destination = prior.destination;
-    }
-    Ok(crate::transcription::modes::finalize_product_result(
-        state, run,
-    ))
 }
 
 /// Simulates the OS paste shortcut (`Ctrl+V`, or `Cmd+V` on macOS) so the
@@ -1375,7 +1211,7 @@ pub(crate) async fn transcribe_file_path_inner(
     let audio_path = crate::audio_store::save(&id, &ext, &bytes);
 
     {
-        let mode = *state.transcription_mode.read();
+        let mode = crate::pipeline_contract::TranscriptionMode::FastAccurate;
         match crate::transcription::run_product_mode_with_duration(
             state, bytes, &file_name, mime, &ext, None,
         )

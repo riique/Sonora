@@ -1,6 +1,6 @@
 //! Optional visual context for AssemblyAI. All image data remains ephemeral.
 use crate::models::AppState;
-use crate::pipeline_contract::{GeminiProvider, TranscriptionMode};
+use crate::pipeline_contract::GeminiProvider;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc, time::Duration};
@@ -66,17 +66,8 @@ pub fn is_assemblyai(model: &str) -> bool {
         .starts_with("assemblyai/universal-3")
 }
 pub fn selected_assemblyai(state: &AppState) -> bool {
-    let pipelines = state.gemini_pipelines.read();
-    let choice = match *state.transcription_mode.read() {
-        TranscriptionMode::UltraFast => return false,
-        TranscriptionMode::FastAccurate => &pipelines.fast_accurate,
-        TranscriptionMode::Precise => &pipelines.precise,
-        TranscriptionMode::UltraPrecise => &pipelines.ultra_precise,
-    };
-    choice.provider == GeminiProvider::OpenRouter
-        && choice
-            .resolved_model_id()
-            .is_ok_and(|id| is_assemblyai(&id))
+    let choice = state.gemini_pipelines.read().fast_accurate.clone();
+    choice.provider == GeminiProvider::OpenRouter && is_assemblyai(choice.model_id())
 }
 fn safe_terms(terms: impl IntoIterator<Item = String>, limit: usize) -> Vec<String> {
     let mut seen = HashSet::new();

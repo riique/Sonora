@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-transcription-route"
+description = "Enables the get_transcription_route command without any pre-configured scope."
+commands.allow = ["get_transcription_route"]
+
+[[permission]]
+identifier = "deny-get-transcription-route"
+description = "Denies the get_transcription_route command without any pre-configured scope."
+commands.deny = ["get_transcription_route"]

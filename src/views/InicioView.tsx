@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { KbdCombo, shortcutKeys } from "../components/ui/Kbd";
 import { ErrorState, SkeletonRows } from "../components/ui/Surface";
@@ -8,42 +8,27 @@ import { formatDuration, shortStamp } from "../lib/format";
 import { LogRow } from "../components/ui/LogRow";
 import {
   getHistoryPage,
-  getModeConfig,
-  getOutputPolicyConfig,
   getShortcuts,
-  setOutputPolicyConfig,
+  getTranscriptionRoute,
   type HistoryEntry,
-  type ModeConfigSnapshot,
-  type OutputPolicyConfig,
   type ShortcutConfig,
+  type TranscriptionRoute,
 } from "../lib/tauri";
 import { formatClock, Tally, useElapsed, type OnAirState } from "../recording/useOnAir";
 import type { Navigate } from "./index";
 
-export const MODE_LABELS: Record<string, string> = {
-  "ultra-fast": "Ultrarrápido",
-  "fast-accurate": "Rápido e preciso",
-  precise: "Preciso",
-  "ultra-precise": "Ultrapreciso",
+const MODEL_LABELS: Record<TranscriptionRoute["model"], string> = {
+  transcribe35: "Gemini 3.5 Transcribe",
+  "flash-lite35": "Gemini 3.5 Flash-Lite",
+  flash36: "Gemini 3.6 Flash",
+  "assemblyai-universal-3-6-pro": "AssemblyAI Universal-3.6 Pro",
 };
 
 /** One readable line describing the active route: model and provider. */
-export function routeSummary(config: ModeConfigSnapshot | null): string {
-  if (!config) return "";
-  if (config.mode === "ultra-fast") {
-    const whisper = config.gemini_pipelines.ultra_fast_whisper === "large-v3" ? "Whisper Large v3" : "Whisper Large v3 Turbo";
-    return config.gemini_pipelines.ultra_fast_provider === "groq" ? `${whisper} direto na Groq` : `${whisper} via OpenRouter (Groq)`;
-  }
-  const key = config.mode === "fast-accurate" ? "fast_accurate" : config.mode === "precise" ? "precise" : "ultra_precise";
-  const route = config.gemini_pipelines[key];
+export function routeSummary(route: TranscriptionRoute | null): string {
   if (!route) return "";
-  const model = route.provider === "meta"
-    ? route.custom_model || "Muse Voice Transcribe 1.0"
-    : route.use_custom_model
-      ? route.custom_model || "Modelo customizado"
-      : route.model === "transcribe35" ? "Gemini 3.5 Transcribe" : route.model === "flash36" ? "Gemini 3.6 Flash" : "Gemini 3.5 Flash-Lite";
-  const provider = route.provider === "meta" ? "Meta" : route.provider === "open-router" ? "OpenRouter" : "Google AI Studio";
-  return `${model} via ${provider}`;
+  const provider = route.provider === "open-router" ? "OpenRouter" : "Google AI Studio";
+  return `${MODEL_LABELS[route.model] ?? route.model} via ${provider}`;
 }
 
 const HEADLINE: Record<OnAirState, string> = {
@@ -55,21 +40,18 @@ const HEADLINE: Record<OnAirState, string> = {
 export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate; onAir?: OnAirState }) {
   const [totals, setTotals] = useState({ count: 0, words: 0 });
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [policy, setPolicy] = useState<OutputPolicyConfig | null>(null);
-  const [savingPolicy, setSavingPolicy] = useState(false);
   const [error, setError] = useState("");
-  const [pipeline, setPipeline] = useState<ModeConfigSnapshot | null>(null);
+  const [route, setRoute] = useState<TranscriptionRoute | null>(null);
   const [shortcuts, setShortcutsState] = useState<ShortcutConfig>({ toggle: "Control+B", cancel: "Control+Q", command: "Control+Shift+B", hold_to_talk: false });
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
     try {
-      const [entries, config, output] = await Promise.all([getHistoryPage("", 0, 5), getModeConfig(), getOutputPolicyConfig()]);
-      setPolicy(output);
+      const [entries, config] = await Promise.all([getHistoryPage("", 0, 5), getTranscriptionRoute()]);
       setError("");
       setHistory(entries.items);
       setTotals({ count: entries.total, words: entries.total_words });
-      setPipeline(config);
+      setRoute(config);
     } catch (failure) {
       setError(String(failure));
     } finally {
@@ -86,23 +68,7 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
     };
   }, []);
 
-  const changeOutput = async (change: Partial<Pick<OutputPolicyConfig, "destination" | "temporary_override">>) => {
-    if (savingPolicy) return;
-    setSavingPolicy(true);
-    setError("");
-    try {
-      const current = await getOutputPolicyConfig();
-      setPolicy(await setOutputPolicyConfig({ ...current, ...change }));
-    } catch (failure) {
-      setError(String(failure));
-    } finally {
-      setSavingPolicy(false);
-    }
-  };
-
-  const recording = onAir !== "off";
   const elapsed = useElapsed(onAir);
-  const enabledProfiles = policy?.profiles.filter((profile) => profile.enabled) ?? [];
   const toggleKeys = shortcutKeys(shortcuts.toggle);
   const cancelKeys = shortcutKeys(shortcuts.cancel);
   const commandKeys = shortcuts.command ? shortcutKeys(shortcuts.command) : null;
@@ -139,38 +105,13 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
       <section aria-labelledby="next-take" className="mt-14 border-t border-line pt-6">
         <h2 id="next-take" className="sr-only">Próximo ditado</h2>
         <p className="max-w-[72ch] text-[14px] leading-[2.1] text-muted">
-          O próximo ditado será{" "}
-          <label className="inline-flex">
-            <span className="sr-only">Destino do próximo ditado</span>
-            <InlineSelect
-              disabled={!policy || savingPolicy || recording}
-              value={policy?.destination ?? "focused_field"}
-              onChange={(value) => void changeOutput({ destination: value as OutputPolicyConfig["destination"] })}
-              options={[["focused_field", "colado no campo em foco"], ["clipboard_only", "apenas copiado"], ["scratchpad", "salvo como nota"]]}
-            />
-          </label>
-          {enabledProfiles.length > 0 && (
-            <>
-              , com estilo{" "}
-              <label className="inline-flex">
-                <span className="sr-only">Estilo do próximo ditado</span>
-                <InlineSelect
-                  disabled={!policy || savingPolicy || recording}
-                  value={policy?.temporary_override ?? ""}
-                  onChange={(value) => void changeOutput({ temporary_override: value || null })}
-                  options={[["", "automático por aplicativo"], ...enabledProfiles.map((profile) => [profile.id, profile.name] as [string, string])]}
-                />
-              </label>
-            </>
-          )}
-          , no modo <span className="font-medium text-ink">{MODE_LABELS[pipeline?.mode ?? ""] ?? "…"}</span>
-          {routeSummary(pipeline) && <span> ({routeSummary(pipeline)})</span>}.{" "}
+          Os ditados usam <span className="font-medium text-ink">{routeSummary(route) || "…"}</span>, com Whisper de reserva.{" "}
           <button
             type="button"
             onClick={() => onNavigate("ajustes", "transcricao")}
             className="font-medium text-ink underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-ink"
           >
-            Alterar modo
+            Alterar modelo
           </button>
         </p>
       </section>
@@ -216,22 +157,5 @@ export function InicioView({ onNavigate, onAir = "off" }: { onNavigate: Navigate
         )}
       </section>
     </div>
-  );
-}
-
-/** A select that reads as part of a sentence: underlined value, no box. */
-function InlineSelect({ value, options, onChange, disabled }: { value: string; options: [string, string][]; onChange: (value: string) => void; disabled?: boolean }) {
-  return (
-    <span className="relative inline-flex items-center">
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        className="cursor-pointer appearance-none rounded-[4px] bg-transparent pr-[18px] font-medium text-ink underline decoration-line-strong decoration-1 underline-offset-4 transition-colors hover:decoration-ink disabled:cursor-not-allowed disabled:opacity-60 [&>option]:bg-raised [&>option]:text-ink"
-      >
-        {options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-0 h-3.5 w-3.5 text-muted" aria-hidden />
-    </span>
   );
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Check, Eye, EyeOff, Plus, X } from "lucide-react";
 import {
   getWidgetPreferences,
@@ -11,32 +10,22 @@ import {
   startMicTest,
   stopMicTest,
   onMicTestLevel,
-  getEngineConfig,
   getVocabulary,
   setVocabulary,
-  getDevMode,
-  setDevMode,
+  getVocabularySuggestions,
+  resolveVocabularySuggestion,
   getRunAsAdmin,
   setRunAsAdmin,
   type RunAsAdminStatus,
-  getSanitizerEnabled,
-  setSanitizerEnabled,
-  getAudioStorageConfig,
-  setAudioStorageDirectory,
-  getModeConfig,
-  updateModeConfig,
+  getTranscriptionRoute,
+  setTranscriptionRoute,
   getApiKeys,
   saveApiKeys,
-  type EngineConfigSnapshot,
-  type SanitizerModel,
-  type TranscriptionMode,
+  type CorrectionEvent,
   type GeminiModel,
   type GeminiProvider,
-  type GeminiPipelineChoice,
-  type GeminiPipelineConfig,
   type MicReadyMode,
-  type OpenRouterWhisperModel,
-  type UltraFastProvider,
+  type TranscriptionRoute,
   type VocabularyTerm,
   type VocabularyCategory,
   type WidgetVisibilityMode,
@@ -46,22 +35,16 @@ import { Button } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
 import { EmptyState, ErrorState, PageHeader, PreferenceRow, RowGroup, Section, Segmented } from "../components/ui/Surface";
-import { IntelligenceSettings } from "./IntelligenceSettings";
 import { SmartContextSettings } from "./SmartContextSettings";
-import { OfflineSection } from "./OfflineSection";
 import { UpdatesSection } from "./UpdatesSection";
 import { useFeatures } from "../lib/useFeatures";
 import { ShortcutSettings } from "./AtalhosView";
-import { RecoveryView } from "./RecoveryView";
 import type { SettingsTab } from "./index";
 
 const TABS: { key: SettingsTab; label: string; description: string }[] = [
-  { key: "geral", label: "Geral", description: "Aparência, atalhos, microfone e armazenamento." },
-  { key: "transcricao", label: "Transcrição", description: "Escolha o equilíbrio entre velocidade e precisão." },
-  { key: "provedores", label: "Provedores", description: "As chaves ficam neste computador, protegidas pela sua conta do Windows. Uma chave salva pode ser substituída ou removida, mas nunca é exibida de volta." },
+  { key: "geral", label: "Geral", description: "Aparência, atalhos, microfone e atualizações." },
+  { key: "transcricao", label: "Transcrição", description: "Modelo usado nos ditados e chaves de API." },
   { key: "vocabulario", label: "Vocabulário", description: "Cadastre a grafia correta e como ela costuma soar. A correção só age quando o encaixe é claro; termos literais protegem arquivos, comandos e identificadores." },
-  { key: "inteligencia", label: "Saída e contexto", description: "Formatação, destino, styles, snippets e privacidade." },
-  { key: "dados", label: "Dados e recuperação", description: "Verificação, itens removidos, backup e diagnóstico." },
 ];
 
 const MIC_READY_HINTS: Record<MicReadyMode, string> = {
@@ -70,17 +53,11 @@ const MIC_READY_HINTS: Record<MicReadyMode, string> = {
   always: "Fica aberto enquanto o Sonora estiver rodando. O Windows mostra o microfone em uso.",
 };
 
-function displayWindowsPath(path: string): string {
-  if (path.startsWith("\\\\?\\UNC\\")) return `\\\\${path.slice(8)}`;
-  if (path.startsWith("\\\\?\\")) return path.slice(4);
-  return path;
-}
-
 export function ConfiguracoesView({ tab: controlledTab, onTabChange }: { tab?: SettingsTab; onTabChange?: (tab: SettingsTab) => void } = {}) {
   const [localTab, setLocalTab] = useState<SettingsTab>("geral");
   const tab = controlledTab ?? localTab;
   const setTab = onTabChange ?? setLocalTab;
-  const currentTab = TABS.find((item) => item.key === tab)!;
+  const currentTab = TABS.find((item) => item.key === tab) ?? TABS[0];
 
   return (
     <div>
@@ -110,10 +87,7 @@ export function ConfiguracoesView({ tab: controlledTab, onTabChange }: { tab?: S
           <div key={tab} className="animate-fade-in">
             {tab === "geral" && <GeralTab />}
             {tab === "transcricao" && <TranscricaoTab />}
-            {tab === "provedores" && <ProvedoresTab />}
             {tab === "vocabulario" && <VocabularioTab />}
-            {tab === "inteligencia" && <IntelligenceSettings />}
-            {tab === "dados" && <DadosTab />}
           </div>
         </section>
       </div>
@@ -133,10 +107,6 @@ function GeralTab() {
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
-  const [audioDirectory, setAudioDirectory] = useState("");
-  const [defaultAudioDirectory, setDefaultAudioDirectory] = useState("");
-  const [customAudioDirectory, setCustomAudioDirectory] = useState(false);
-  const [audioDirectoryStatus, setAudioDirectoryStatus] = useState("");
   const { features, update: updateFeatures, error: featuresError } = useFeatures();
   const micReady = features?.mic_ready ?? "after_use";
 
@@ -146,13 +116,6 @@ function GeralTab() {
     getWidgetPreferences().then((preferences) => setWidgetVisibility(preferences.visibility_mode)).catch((e) => console.error("get_widget_preferences failed:", e));
     listAudioDevices().then(setDevices).catch((e) => console.error("listAudioDevices failed:", e));
     getInputDevice().then(setSelectedDevice).catch((e) => console.error("getInputDevice failed:", e));
-    getAudioStorageConfig()
-      .then((config) => {
-        setAudioDirectory(displayWindowsPath(config.effective_directory));
-        setDefaultAudioDirectory(displayWindowsPath(config.default_directory));
-        setCustomAudioDirectory(Boolean(config.custom_directory));
-      })
-      .catch((e) => console.error("getAudioStorageConfig failed:", e));
   }, []);
 
   useEffect(() => {
@@ -172,13 +135,6 @@ function GeralTab() {
   }, [isTesting]);
 
   useEffect(() => () => { stopMicTest().catch(() => {}); }, []);
-
-  const applyStorage = (config: Awaited<ReturnType<typeof setAudioStorageDirectory>>, status: string) => {
-    setAudioDirectory(displayWindowsPath(config.effective_directory));
-    setDefaultAudioDirectory(displayWindowsPath(config.default_directory));
-    setCustomAudioDirectory(Boolean(config.custom_directory));
-    setAudioDirectoryStatus(status);
-  };
 
   return (
     <div>
@@ -299,123 +255,25 @@ function GeralTab() {
       </Section>
 
       <UpdatesSection />
-
-      <Section title="Pasta dos áudios" description="Onde as próximas gravações são salvas. Áudios existentes continuam onde estão e acessíveis pelo Histórico.">
-        <div className="border-y border-line py-4">
-          <p className="truncate font-mono text-[12px] text-strong" title={audioDirectory}>{audioDirectory || "Carregando…"}</p>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <span className="meta-label">
-              {customAudioDirectory ? "Local personalizado" : "Local padrão do aplicativo"}
-              {audioDirectoryStatus && <span className="ml-2 text-cue" role="status">· {audioDirectoryStatus}</span>}
-            </span>
-            <div className="flex gap-2">
-              {customAudioDirectory && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  title={defaultAudioDirectory}
-                  onClick={async () => {
-                    try { applyStorage(await setAudioStorageDirectory(null), "Pasta padrão restaurada"); }
-                    catch (error) { setAudioDirectoryStatus(String(error)); }
-                  }}
-                >
-                  Usar padrão
-                </Button>
-              )}
-              <Button
-                size="sm"
-                onClick={async () => {
-                  setAudioDirectoryStatus("");
-                  const selected = await open({ directory: true, multiple: false, title: "Escolher pasta para os áudios transcritos" });
-                  if (typeof selected !== "string") return;
-                  try { applyStorage(await setAudioStorageDirectory(selected), "Pasta atualizada"); }
-                  catch (error) { setAudioDirectoryStatus(String(error)); }
-                }}
-              >
-                Escolher pasta
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Section>
     </div>
   );
 }
 
 /* ------------------------------- Transcrição ------------------------------- */
 
-const MODES: { id: TranscriptionMode; title: string; engine: string; blurb: string }[] = [
-  { id: "ultra-fast", title: "Ultrarrápido", engine: "Whisper", blurb: "Menor latência" },
-  { id: "fast-accurate", title: "Rápido e preciso", engine: "Modelo de áudio", blurb: "Boa precisão com menos etapas" },
-  { id: "precise", title: "Preciso", engine: "Whisper + Gemini", blurb: "Melhor equilíbrio geral" },
-  { id: "ultra-precise", title: "Ultrapreciso", engine: "Whisper → validador → Gemini", blurb: "Para conteúdo importante" },
+const MODELS: { id: GeminiModel; label: string; openRouterOnly?: boolean }[] = [
+  { id: "assemblyai-universal-3-6-pro", label: "AssemblyAI Universal-3.6 Pro", openRouterOnly: true },
+  { id: "transcribe35", label: "Gemini 3.5 Transcribe" },
+  { id: "flash-lite35", label: "Gemini 3.5 Flash-Lite" },
+  { id: "flash36", label: "Gemini 3.6 Flash" },
 ];
-
-const META_LANGUAGES = [
-  { id: "Portuguese", label: "Português" },
-  { id: "English", label: "Inglês" },
-  { id: "Spanish", label: "Espanhol" },
-  { id: "French", label: "Francês" },
-  { id: "Italian", label: "Italiano" },
-  { id: "German", label: "Alemão" },
-  { id: "Japanese", label: "Japonês" },
-];
-
-const SANITIZERS = [
-  ["llama-70b", "LLaMA 70B"],
-  ["gpt-oss-20b", "GPT-OSS 20B"],
-  ["gpt-oss-120b", "GPT-OSS 120B"],
-  ["qwen3-27b", "Qwen 3.6 27B"],
-] as const;
 
 function TranscricaoTab() {
-  const [mode, setMode] = useState<TranscriptionMode>("ultra-fast");
-  const [fileTaggingEnabled, setFileTaggingEnabled] = useState(true);
-  const [geminiFallback, setGeminiFallback] = useState(true);
-  const [sanitizer, setSanitizer] = useState<SanitizerModel>("llama-70b");
-  const [sanitizerEnabled, setSanitizerEnabledState] = useState(true);
-  const [engineConfig, setEngineConfig] = useState<EngineConfigSnapshot | null>(null);
-  const { features, update: updateFeatures, error: featuresError } = useFeatures();
+  const [route, setRoute] = useState<TranscriptionRoute | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  const [geminiPipelines, setGeminiPipelines] = useState<GeminiPipelineConfig>({
-    ultra_fast_provider: "open-router",
-    ultra_fast_whisper: "large-v3-turbo",
-    fast_accurate: { model: "flash-lite35", provider: "google-ai-studio", use_custom_model: false, custom_model: "" },
-    precise: { model: "flash-lite35", provider: "google-ai-studio", use_custom_model: false, custom_model: "" },
-    ultra_precise: { model: "flash-lite35", provider: "google-ai-studio", use_custom_model: false, custom_model: "" },
-  });
-
-  const persistMode = (p: { mode?: TranscriptionMode; gemini_fallback_to_whisper?: boolean; file_tagging_enabled?: boolean; gemini_pipelines?: GeminiPipelineConfig }) => {
-    updateModeConfig({
-      modes_enabled: true,
-      mode: p.mode ?? mode,
-      gemini_fallback_to_whisper: p.gemini_fallback_to_whisper ?? geminiFallback,
-      file_tagging_enabled: p.file_tagging_enabled ?? fileTaggingEnabled,
-      gemini_pipelines: p.gemini_pipelines ?? geminiPipelines,
-    })
-      .then(() => setStatus({ ok: true, text: "Salvo" }))
-      .catch((e) => setStatus({ ok: false, text: String(e) }));
-  };
 
   useEffect(() => {
-    getModeConfig()
-      .then((m) => {
-        setMode(m.mode);
-        setGeminiFallback(m.gemini_fallback_to_whisper);
-        setFileTaggingEnabled(m.file_tagging_enabled);
-        setGeminiPipelines({
-          ultra_fast_provider: "open-router",
-          ...m.gemini_pipelines,
-        });
-      })
-      .catch(console.error);
-    getEngineConfig()
-      .then((c) => {
-        setEngineConfig(c);
-        if (c.sanitizer) setSanitizer(c.sanitizer as SanitizerModel);
-      })
-      .catch(console.error);
-    getSanitizerEnabled().then(setSanitizerEnabledState).catch(console.error);
+    getTranscriptionRoute().then(setRoute).catch((e) => setStatus({ ok: false, text: String(e) }));
   }, []);
 
   useEffect(() => {
@@ -424,250 +282,59 @@ function TranscricaoTab() {
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const routeKey = mode === "fast-accurate" ? "fast_accurate" : mode === "precise" ? "precise" : mode === "ultra-precise" ? "ultra_precise" : null;
-  const route = routeKey ? geminiPipelines[routeKey] : null;
-
-  const updateRoute = (patch: Partial<GeminiPipelineChoice>, shouldPersist = true) => {
-    if (!routeKey) return;
-    const next = { ...geminiPipelines, [routeKey]: { ...geminiPipelines[routeKey], ...patch } };
-    setGeminiPipelines(next);
-    if (shouldPersist) persistMode({ gemini_pipelines: next });
+  const updateRoute = (patch: Partial<TranscriptionRoute>) => {
+    if (!route) return;
+    const next = { ...route, ...patch };
+    setRoute(next);
+    setTranscriptionRoute(next)
+      .then(() => setStatus({ ok: true, text: "Salvo" }))
+      .catch((e) => setStatus({ ok: false, text: String(e) }));
   };
-
-  const selectedLanguages = route?.meta_languages?.length ? route.meta_languages : ["Portuguese", "English"];
 
   return (
     <div>
       <Section
-        title="Modo"
-        description="Vale para os próximos ditados e para arquivos enviados."
+        title="Modelo"
+        description="Se o modelo falhar, o Sonora usa o Whisper pelo OpenRouter e marca isso no Histórico."
         action={status && <span role="status" className={"inline-flex items-center gap-1.5 text-[12px] " + (status.ok ? "text-cue" : "text-live")}>{status.ok && <Check className="h-3.5 w-3.5" aria-hidden />}{status.text}</span>}
       >
-        <div className="hairline-list border-y border-line" role="radiogroup" aria-label="Modo de transcrição">
-          {MODES.map((item) => {
-            const active = mode === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => { setMode(item.id); persistMode({ mode: item.id }); }}
-                className="group flex w-full items-center gap-4 py-3.5 text-left"
-              >
-                <span className={"flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors " + (active ? "border-ink" : "border-line-strong group-hover:border-faint")} aria-hidden>
-                  {active && <span className="h-2 w-2 rounded-full bg-ink" />}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className={"block text-[13px] " + (active ? "font-semibold text-ink" : "font-medium text-strong")}>{item.title}</span>
-                  <span className="block text-[12.5px] text-muted">{item.blurb}</span>
-                </span>
-                <span className="timecode shrink-0 max-[640px]:hidden">{item.engine}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      <Section title={`Rota do modo ${MODES.find((m) => m.id === mode)?.title ?? ""}`}>
-        {routeKey && route ? (
-          <>
-            <RowGroup>
-              <PreferenceRow title="Provedor" htmlFor="route-provider">
-                <Select
-                  id="route-provider"
-                  className="w-[220px]"
-                  value={route.provider}
-                  onChange={(e) => {
-                    const provider = e.target.value as GeminiProvider;
-                    if (provider === "meta") updateRoute({ provider, model: "muse-voice-transcribe-1.0", use_custom_model: false });
-                    else updateRoute({ provider, model: route.model === "muse-voice-transcribe-1.0" ? "flash-lite35" : route.model });
-                  }}
-                >
-                  <option value="google-ai-studio">Google AI Studio</option>
-                  <option value="open-router">OpenRouter</option>
-                  {routeKey === "fast_accurate" && <option value="meta">Meta</option>}
-                </Select>
-              </PreferenceRow>
-              <PreferenceRow title="Modelo" htmlFor="route-model">
-                <Select
-                  id="route-model"
-                  className="w-[220px]"
-                  value={route.use_custom_model ? "custom" : route.model}
-                  onChange={(e) => {
-                    if (e.target.value === "custom") updateRoute({ use_custom_model: true }, Boolean(route.custom_model.trim()));
-                    else updateRoute({ model: e.target.value as GeminiModel, use_custom_model: false });
-                  }}
-                >
-                  {route.provider === "meta" ? (
-                    <option value="muse-voice-transcribe-1.0">Muse Voice Transcribe 1.0</option>
-                  ) : (
-                    <>
-                      <option value="flash-lite35">Gemini 3.5 Flash-Lite</option>
-                      <option value="flash36">Gemini 3.6 Flash</option>
-                      {routeKey === "fast_accurate" && <option value="transcribe35">Gemini 3.5 Transcribe</option>}
-                    </>
-                  )}
-                  <option value="custom">ID customizado…</option>
-                </Select>
-              </PreferenceRow>
-              {route.use_custom_model && (
-                <PreferenceRow title="ID do modelo" htmlFor="route-custom-model">
-                  <Input
-                    id="route-custom-model"
-                    className="w-[260px] font-mono text-[12px]"
-                    value={route.custom_model}
-                    placeholder={route.provider === "meta" ? "muse-voice-transcribe-1.0" : route.provider === "open-router" ? "google/gemini-3.7-flash" : "gemini-3.7-flash"}
-                    onChange={(e) => updateRoute({ custom_model: e.target.value }, false)}
-                    onBlur={(e) => { if (e.currentTarget.value.trim()) updateRoute({ custom_model: e.currentTarget.value.trim(), use_custom_model: true }); }}
-                  />
-                </PreferenceRow>
-              )}
-              {route.provider === "meta" && (
-                <div className="py-4">
-                  <h3 className="text-[13px] font-medium text-ink">Idiomas da fala</h3>
-                  <p className="mt-0.5 max-w-[60ch] text-[12.5px] leading-5 text-muted">Limitar aos idiomas que você usa evita que o modelo confunda fonemas, e você pode alternar entre eles na mesma fala.</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {META_LANGUAGES.map((lang) => {
-                      const isSelected = selectedLanguages.includes(lang.id);
-                      return (
-                        <button
-                          key={lang.id}
-                          type="button"
-                          aria-pressed={isSelected}
-                          onClick={() => {
-                            if (isSelected && selectedLanguages.length === 1) return;
-                            updateRoute({ meta_languages: isSelected ? selectedLanguages.filter((l) => l !== lang.id) : [...selectedLanguages, lang.id] });
-                          }}
-                          className={"inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] transition-colors " + (isSelected ? "border-ink bg-ink text-canvas" : "border-line text-muted hover:border-line-strong hover:text-ink")}
-                        >
-                          {isSelected && <Check className="h-3 w-3" aria-hidden />}
-                          {lang.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </RowGroup>
-            <p className="mt-3 max-w-[64ch] text-[12px] leading-5 text-muted">
-              {route.provider === "meta"
-                ? "A Meta Model API usa o Muse Voice Transcribe 1.0, com reconhecimento multilíngue e vocabulário personalizado."
-                : route.provider === "open-router"
-                  ? "A rota é automática: modelos dedicados de fala usam Speech-to-Text; modelos com áudio usam Chat Completions."
-                  : "O Google AI Studio usa modelos multimodais com áudio pela Gemini API."}
-            </p>
-          </>
-        ) : (
-          <>
-            <RowGroup>
-              <PreferenceRow
-                title="Provedor"
-                description={
-                  (geminiPipelines.ultra_fast_provider ?? "open-router") === "groq"
-                    ? "Endpoint de transcrição da Groq, com a sua chave Groq. Sem passar pelo OpenRouter."
-                    : "Endpoint de transcrição do OpenRouter, com o Groq fixo e sem fallback. Usa a chave do OpenRouter."
-                }
-              >
-                <Segmented<UltraFastProvider>
-                  label="Provedor do Ultrarrápido"
-                  value={geminiPipelines.ultra_fast_provider ?? "open-router"}
-                  onChange={(value) => {
-                    const next = { ...geminiPipelines, ultra_fast_provider: value };
-                    setGeminiPipelines(next);
-                    persistMode({ gemini_pipelines: next });
-                  }}
-                  options={[
-                    { value: "open-router", label: "OpenRouter" },
-                    { value: "groq", label: "Groq direto" },
-                  ]}
-                />
-              </PreferenceRow>
-              <PreferenceRow title="Modelo Whisper" description="A mesma variante nos dois provedores." htmlFor="ultra-fast-whisper-model">
-                <Select
-                  id="ultra-fast-whisper-model"
-                  className="w-[240px] font-mono text-[12px]"
-                  value={geminiPipelines.ultra_fast_whisper}
-                  onChange={(e) => {
-                    const next = { ...geminiPipelines, ultra_fast_whisper: e.target.value as OpenRouterWhisperModel };
-                    setGeminiPipelines(next);
-                    persistMode({ gemini_pipelines: next });
-                  }}
-                >
-                  <option value="large-v3-turbo">whisper-large-v3-turbo</option>
-                  <option value="large-v3">whisper-large-v3</option>
-                </Select>
-              </PreferenceRow>
-              <PreferenceRow
-                title="Refinar com IA"
-                description="Corrige pontuação e termos do vocabulário e aplica o estilo do aplicativo em uso. Acrescenta cerca de meio segundo. Desligado, o texto sai como o Whisper ouviu."
-              >
-                <Toggle
-                  label="Refinar com IA no Ultrarrápido"
-                  checked={features?.quick_refine ?? true}
-                  disabled={!features}
-                  onChange={(value) => void updateFeatures({ quick_refine: value })}
-                />
-              </PreferenceRow>
-            </RowGroup>
-            {featuresError && <p className="mt-2 text-[12px] text-live" role="alert">{featuresError}</p>}
-          </>
-        )}
-      </Section>
-
-      {route?.provider === "open-router" &&
-        route.use_custom_model &&
-        route.custom_model.trim().toLowerCase().startsWith("assemblyai/universal-3") && (
-          <SmartContextSettings />
-        )}
-
-      {(mode === "fast-accurate" || mode === "ultra-precise") && (
-        <Section title="Segurança da rota">
+        {route ? (
           <RowGroup>
-            {mode === "fast-accurate" && (
-              <PreferenceRow title="Usar Whisper se o modelo de áudio falhar" description="O histórico marca quando o fallback acontecer.">
-                <Toggle label="Usar Whisper se o modelo de áudio falhar" checked={geminiFallback} onChange={(v) => { setGeminiFallback(v); persistMode({ gemini_fallback_to_whisper: v }); }} />
-              </PreferenceRow>
-            )}
-            {mode === "ultra-precise" && (
-              <>
-                <PreferenceRow title="Validador semântico" description="Corrige a ortografia depois do Whisper, antes do Gemini.">
-                  <Toggle label="Ativar validador semântico" checked={sanitizerEnabled} onChange={(v) => { setSanitizerEnabledState(v); setSanitizerEnabled(v).catch(console.error); }} />
-                </PreferenceRow>
-                {sanitizerEnabled && (
-                  <PreferenceRow title="Modelo do validador" htmlFor="sanitizer-model">
-                    <Select
-                      id="sanitizer-model"
-                      className="w-[200px]"
-                      value={sanitizer}
-                      onChange={(e) => {
-                        const id = e.target.value as SanitizerModel;
-                        setSanitizer(id);
-                        if (engineConfig) {
-                          invoke("update_engine_config", { payload: { ...engineConfig, sanitizer: id } })
-                            .then(() => setEngineConfig({ ...engineConfig, sanitizer: id }))
-                            .catch(console.error);
-                        }
-                      }}
-                    >
-                      {SANITIZERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                    </Select>
-                  </PreferenceRow>
-                )}
-              </>
-            )}
+            <PreferenceRow title="Provedor" htmlFor="route-provider">
+              <Select
+                id="route-provider"
+                className="w-[220px]"
+                value={route.provider}
+                onChange={(e) => {
+                  const provider = e.target.value as GeminiProvider;
+                  const openRouterOnly = MODELS.find((m) => m.id === route.model)?.openRouterOnly;
+                  updateRoute(provider === "google-ai-studio" && openRouterOnly ? { provider, model: "transcribe35" } : { provider });
+                }}
+              >
+                <option value="open-router">OpenRouter</option>
+                <option value="google-ai-studio">Google AI Studio</option>
+              </Select>
+            </PreferenceRow>
+            <PreferenceRow title="Modelo" htmlFor="route-model">
+              <Select
+                id="route-model"
+                className="w-[220px]"
+                value={route.model}
+                onChange={(e) => updateRoute({ model: e.target.value as GeminiModel })}
+              >
+                {MODELS.filter((m) => route.provider === "open-router" || !m.openRouterOnly).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </Select>
+            </PreferenceRow>
           </RowGroup>
-        </Section>
-      )}
+        ) : (
+          <p className="text-[13px] text-muted">Carregando…</p>
+        )}
+      </Section>
 
-      <OfflineSection features={features} onChange={updateFeatures} />
+      {route?.model === "assemblyai-universal-3-6-pro" && <SmartContextSettings />}
 
-      <Section title="Para programação">
-        <RowGroup>
-          <PreferenceRow title="FileTagging" description="Converte referências claras a arquivos em menções como @index.tsx, para chats de código.">
-            <Toggle label="Ativar FileTagging" checked={fileTaggingEnabled} onChange={(value) => { setFileTaggingEnabled(value); persistMode({ file_tagging_enabled: value }); }} />
-          </PreferenceRow>
-        </RowGroup>
+      <Section title="Chaves de API" description="Ficam neste computador, protegidas pela sua conta do Windows. Uma chave salva pode ser substituída ou removida, mas nunca é exibida de volta.">
+        <ProvedoresList />
       </Section>
     </div>
   );
@@ -675,17 +342,15 @@ function TranscricaoTab() {
 
 /* ------------------------------- Provedores ------------------------------- */
 
-type KeyId = "groq" | "google" | "deepgram" | "openrouter" | "meta";
+type KeyId = "openrouter" | "google";
 
 const PROVIDERS: { id: KeyId; name: string; placeholder: string; usedBy: string }[] = [
-  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Ultrarrápido, rotas OpenRouter e retrato de voz" },
-  { id: "google", name: "Google Gemini", placeholder: "AIza…", usedBy: "Rápido e preciso, Preciso, Ultrapreciso e pronúncia" },
-  { id: "groq", name: "Groq", placeholder: "gsk_…", usedBy: "Whisper, validador e fallbacks" },
-  { id: "meta", name: "Meta Model API", placeholder: "Chave da Meta (dev.meta.ai)", usedBy: "Rápido e preciso com provedor Meta" },
+  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Transcrição pelo OpenRouter, Whisper de reserva, comando de voz e retrato da voz" },
+  { id: "google", name: "Google Gemini", placeholder: "AIza…", usedBy: "Transcrição pelo Google AI Studio e comando de voz" },
 ];
 
-function ProvedoresTab() {
-  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ groq: [], google: [], deepgram: [], openrouter: [], meta: [] });
+function ProvedoresList() {
+  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ google: [], openrouter: [] });
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<KeyId | null>(null);
   const [saved, setSaved] = useState<KeyId | null>(null);
@@ -694,7 +359,7 @@ function ProvedoresTab() {
 
   useEffect(() => {
     getApiKeys()
-      .then((k) => setKeys({ groq: k.groq ?? [], google: k.google ?? [], deepgram: k.deepgram ?? [], openrouter: k.openrouter ?? [], meta: k.meta ?? [] }))
+      .then((k) => setKeys({ google: k.google ?? [], openrouter: k.openrouter ?? [] }))
       .catch(console.error);
   }, []);
 
@@ -821,9 +486,21 @@ function VocabularioTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [suggestions, setSuggestions] = useState<CorrectionEvent[]>([]);
+
   useEffect(() => {
     getVocabulary().then(setTerms).catch(console.error).finally(() => setLoading(false));
+    getVocabularySuggestions().then(setSuggestions).catch(console.error);
   }, []);
+
+  const resolveSuggestion = (id: string, accept: boolean) => {
+    resolveVocabularySuggestion(id, accept)
+      .then(async () => {
+        setSuggestions((items) => items.filter((item) => item.id !== id));
+        if (accept) setTerms(await getVocabulary());
+      })
+      .catch((e) => setError(String(e)));
+  };
 
   const closeForm = () => {
     setFormOpen(false);
@@ -864,6 +541,23 @@ function VocabularioTab() {
 
   return (
     <div>
+      {suggestions.length > 0 && (
+        <section className="mb-10" aria-labelledby="vocab-suggestions-title">
+          <h3 id="vocab-suggestions-title" className="section-title">Sugestões das suas correções</h3>
+          <p className="mt-1 text-[12.5px] text-muted">Palavras que você corrigiu mais de uma vez no Histórico.</p>
+          <div className="hairline-list mt-3 border-y border-line">
+            {suggestions.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-5 py-3">
+                <p className="text-[13px] text-ink"><span className="text-muted line-through decoration-line-strong">{event.before}</span> → <span className="font-medium">{event.after}</span><span className="timecode ml-2">{event.count}×</span></p>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => resolveSuggestion(event.id, false)}>Ignorar</Button>
+                  <Button size="sm" onClick={() => resolveSuggestion(event.id, true)}><Check className="h-3.5 w-3.5" aria-hidden />Adicionar</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {formOpen ? (
         <section className="mb-10 animate-fade-in border-y border-line py-6" aria-labelledby="vocab-form-title">
@@ -966,34 +660,6 @@ function VocabularioTab() {
           })}
         </ul>
       )}
-    </div>
-  );
-}
-
-/* --------------------------- Dados e recuperação --------------------------- */
-
-function DadosTab() {
-  const [devMode, setDevModeState] = useState(false);
-
-  useEffect(() => {
-    getDevMode().then(setDevModeState).catch(console.error);
-  }, []);
-
-  return (
-    <div>
-      <RecoveryView />
-      <Section title="Diagnóstico">
-        <RowGroup>
-          <PreferenceRow title="Modo desenvolvedor" description="Mostra no Histórico tempos, tentativas e requisições sanitizadas de cada ditado.">
-            <Toggle label="Ativar modo desenvolvedor" checked={devMode} onChange={(v) => { setDevModeState(v); setDevMode(v).catch(console.error); }} />
-          </PreferenceRow>
-          <div className="py-4">
-            <h3 className="text-[13px] font-medium text-ink">Logs locais</h3>
-            <p className="mt-0.5 text-[12.5px] text-muted">Ficam somente neste computador: <span className="font-mono text-strong">app.log</span> para eventos e <span className="font-mono text-strong">crash.log</span> para falhas.</p>
-            <p className="mt-2 font-mono text-[12px] text-strong">%APPDATA%\com.haumeavoice.app\logs\</p>
-          </div>
-        </RowGroup>
-      </Section>
     </div>
   );
 }

@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::{sync::OnceLock, time::Duration};
 
 /// Multimodal model used for refinement and pronunciation.
-pub const GEMINI_MODEL: &str = "gemini-3.5-flash-lite";
 /// Higher-capability model used for pronunciation evaluation (CEFR rubric).
 pub const PRONUNCIATION_MODEL: &str = "gemini-3.5-flash";
 

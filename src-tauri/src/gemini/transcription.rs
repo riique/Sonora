@@ -36,7 +36,7 @@ pub async fn transcribe_audio(req: TranscribeRequest) -> Result<GeminiGenerateRe
     let (text, timing, remote, usage) = if is_transcribe {
         let custom_vocab =
             (!req.custom_vocabulary.is_empty()).then(|| req.custom_vocabulary.clone());
-        let text_prompt = req.untrusted_context.as_deref();
+        let text_prompt: Option<&str> = None;
 
         match transport {
             GeminiAudioTransport::Inline => {
@@ -92,12 +92,7 @@ pub async fn transcribe_audio(req: TranscribeRequest) -> Result<GeminiGenerateRe
             }
         }
     } else {
-        let mut prompt =
-            fast_accurate_transcription_prompt(&req.glossary_block, req.file_tagging_enabled);
-        if let Some(context) = req.untrusted_context.as_deref() {
-            prompt.user_prompt.push_str("\n\n");
-            prompt.user_prompt.push_str(context);
-        }
+        let prompt = fast_accurate_transcription_prompt(&req.glossary_block);
 
         match transport {
             GeminiAudioTransport::Inline => {
@@ -185,9 +180,7 @@ mod tests {
             display_name: "test.wav".into(),
             duration_ms: Some(1000),
             glossary_block: "termo".into(),
-            file_tagging_enabled: false,
             custom_vocabulary: vec!["Sonora".into(), "Tauri".into()],
-            untrusted_context: Some("contexto do editor".into()),
         };
 
         assert!(is_transcribe_model(&req.model));
@@ -195,7 +188,7 @@ mod tests {
             &req.model,
             "audio/wav",
             "AAEC",
-            req.untrusted_context.as_deref(),
+            Some("contexto do editor"),
             Some(req.custom_vocabulary.clone()),
         );
 

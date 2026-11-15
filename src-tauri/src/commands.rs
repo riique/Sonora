@@ -1,9 +1,7 @@
 use crate::models::{
-    ApiKeysPayload, DeepgramMode, EngineConfigPayload, GadgetVisualState, SharedState,
-    TranscriptionEngine, WidgetPreferences, WidgetVisibilityMode,
+    ApiKeysPayload, GadgetVisualState, SharedState, WidgetPreferences, WidgetVisibilityMode,
 };
-use crate::pipeline_contract::TranscriptionMode;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::State;
 
 /// Error type returned by every IPC command. Serializes to a plain
@@ -30,150 +28,34 @@ impl Serialize for CommandError {
     }
 }
 
-/// Snapshot returned to the frontend after a configuration update so
-/// the UI can confirm the persisted selection.
-#[derive(Debug, Clone, Serialize)]
-pub struct EngineConfigSnapshot {
-    pub engine: TranscriptionEngine,
-    pub sanitizer: crate::models::SanitizerModel,
-    pub dual_engine: bool,
-    pub reasoning_enabled: bool,
-    pub reasoning_effort: String,
-    pub deepgram_mode: DeepgramMode,
+/// The audio model used for every dictation (Whisper is the automatic backup).
+#[tauri::command]
+pub fn get_transcription_route(
+    state: State<'_, SharedState>,
+) -> crate::pipeline_contract::GeminiPipelineChoice {
+    state.gemini_pipelines.read().fast_accurate.clone()
 }
 
-/// `update_engine_config`
-///
-/// Receives the manual engine and sanitizer selections from the
-/// frontend and persists them into the global `AppState` under their
-/// respective `RwLock` guards, as well as on-disk in settings.json.
 #[tauri::command]
-pub async fn update_engine_config(
+pub async fn set_transcription_route(
     state: State<'_, SharedState>,
-    payload: EngineConfigPayload,
-) -> Result<EngineConfigSnapshot, CommandError> {
+    mut route: crate::pipeline_contract::GeminiPipelineChoice,
+) -> Result<crate::pipeline_contract::GeminiPipelineChoice, CommandError> {
+    route.normalize();
     log::info!(
-        "update_engine_config: engine={:?} sanitizer={:?} dual_engine={} reasoning={} effort={} deepgram_mode={}",
-        payload.engine,
-        payload.sanitizer,
-        payload.dual_engine,
-        payload.reasoning_enabled,
-        payload.reasoning_effort,
-        payload.deepgram_mode.as_str()
+        "set_transcription_route: provider={:?} model={:?}",
+        route.provider,
+        route.model
     );
-
     let shared = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_engine_config_batch(
-            Some(payload.engine),
-            Some(payload.sanitizer),
-            payload.dual_engine,
-            payload.reasoning_enabled,
-            payload.reasoning_effort.clone(),
-            payload.deepgram_mode,
-        )
-        .map_err(CommandError::Internal)?;
-        {
-            *shared.engine.write() = payload.engine;
-        }
-        {
-            *shared.sanitizer.write() = payload.sanitizer;
-        }
-        {
-            *shared.dual_engine.write() = payload.dual_engine;
-        }
-        {
-            *shared.reasoning_enabled.write() = payload.reasoning_enabled;
-        }
-        {
-            *shared.reasoning_effort.write() = payload.reasoning_effort.clone();
-        }
-        {
-            *shared.deepgram_mode.write() = payload.deepgram_mode;
-        }
-
-        Ok(EngineConfigSnapshot {
-            engine: payload.engine,
-            sanitizer: payload.sanitizer,
-            dual_engine: payload.dual_engine,
-            reasoning_enabled: payload.reasoning_enabled,
-            reasoning_effort: payload.reasoning_effort,
-            deepgram_mode: payload.deepgram_mode,
-        })
+        crate::settings::save_transcription_route(route.clone()).map_err(CommandError::Internal)?;
+        shared.gemini_pipelines.write().fast_accurate = route.clone();
+        Ok(route)
     })
     .await
     .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
-/// `get_engine_config`
-///
-/// Returns the currently active transcription engine and sanitizer model selection.
-#[tauri::command]
-pub fn get_engine_config(state: State<'_, SharedState>) -> EngineConfigSnapshot {
-    EngineConfigSnapshot {
-        engine: *state.engine.read(),
-        sanitizer: *state.sanitizer.read(),
-        dual_engine: *state.dual_engine.read(),
-        reasoning_enabled: *state.reasoning_enabled.read(),
-        reasoning_effort: state.reasoning_effort.read().clone(),
-        deepgram_mode: *state.deepgram_mode.read(),
-    }
-}
-
-/// Product-pipeline configuration. `modes_enabled` remains in the payload only
-/// for compatibility with older frontends and is normalized to `true`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModeConfigPayload {
-    pub modes_enabled: bool,
-    pub mode: TranscriptionMode,
-    #[serde(default = "default_true_fallback")]
-    pub gemini_fallback_to_whisper: bool,
-    #[serde(default = "default_true_file_tagging")]
-    pub file_tagging_enabled: bool,
-    #[serde(default)]
-    pub gemini_pipelines: crate::pipeline_contract::GeminiPipelineConfig,
-}
-
-fn default_true_fallback() -> bool {
-    true
-}
-
-fn default_true_file_tagging() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ModeConfigSnapshot {
-    pub modes_enabled: bool,
-    pub mode: TranscriptionMode,
-    pub gemini_fallback_to_whisper: bool,
-    pub file_tagging_enabled: bool,
-    pub gemini_pipelines: crate::pipeline_contract::GeminiPipelineConfig,
-    /// Human labels for UI (copywriting).
-    pub mode_label: String,
-    pub mode_description: String,
-}
-
-fn mode_copy(
-    mode: TranscriptionMode,
-    ultra_fast_provider: crate::pipeline_contract::UltraFastProvider,
-) -> (&'static str, &'static str) {
-    match mode {
-        TranscriptionMode::UltraFast => match ultra_fast_provider {
-            crate::pipeline_contract::UltraFastProvider::Groq => {
-                ("Ultrarrápido", "Whisper direto via Groq")
-            }
-            crate::pipeline_contract::UltraFastProvider::OpenRouter => {
-                ("Ultrarrápido", "Whisper via OpenRouter STT (Groq)")
-            }
-        },
-        TranscriptionMode::FastAccurate => ("Rápido e preciso", "Transcrição direta com Gemini"),
-        TranscriptionMode::Precise => ("Preciso", "Whisper e Gemini em paralelo"),
-        TranscriptionMode::UltraPrecise => {
-            ("Ultrapreciso", "Whisper, validador e Gemini em sequência")
-        }
-    }
 }
 
 #[tauri::command]
@@ -200,75 +82,6 @@ pub async fn set_smart_context_config(
     })
     .await
     .map_err(|err| CommandError::Internal(err.to_string()))?
-}
-
-#[tauri::command]
-pub fn get_mode_config(state: State<'_, SharedState>) -> ModeConfigSnapshot {
-    let mode = *state.transcription_mode.read();
-    let pipelines = state.gemini_pipelines.read().clone();
-    let (label, desc) = mode_copy(mode, pipelines.ultra_fast_provider);
-    ModeConfigSnapshot {
-        modes_enabled: *state.modes_enabled.read(),
-        mode,
-        gemini_fallback_to_whisper: *state.gemini_fallback_to_whisper.read(),
-        file_tagging_enabled: *state.file_tagging_enabled.read(),
-        gemini_pipelines: pipelines,
-        mode_label: label.to_string(),
-        mode_description: desc.to_string(),
-    }
-}
-
-#[tauri::command]
-pub async fn update_mode_config(
-    state: State<'_, SharedState>,
-    payload: ModeConfigPayload,
-) -> Result<ModeConfigSnapshot, CommandError> {
-    for choice in [
-        &payload.gemini_pipelines.fast_accurate,
-        &payload.gemini_pipelines.precise,
-        &payload.gemini_pipelines.ultra_precise,
-    ] {
-        choice
-            .resolved_model_id()
-            .map_err(CommandError::InvalidPayload)?;
-    }
-
-    log::info!(
-        "update_mode_config: mode={:?} gemini_fallback={}",
-        payload.mode,
-        payload.gemini_fallback_to_whisper
-    );
-
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_mode_config_batch(
-            true,
-            payload.mode,
-            payload.gemini_fallback_to_whisper,
-            payload.file_tagging_enabled,
-            payload.gemini_pipelines.clone(),
-        )
-        .map_err(CommandError::Internal)?;
-        *shared.modes_enabled.write() = true;
-        *shared.transcription_mode.write() = payload.mode;
-        *shared.gemini_fallback_to_whisper.write() = payload.gemini_fallback_to_whisper;
-        *shared.file_tagging_enabled.write() = payload.file_tagging_enabled;
-        *shared.gemini_pipelines.write() = payload.gemini_pipelines.clone();
-
-        let (label, desc) = mode_copy(payload.mode, payload.gemini_pipelines.ultra_fast_provider);
-        Ok(ModeConfigSnapshot {
-            modes_enabled: true,
-            mode: payload.mode,
-            gemini_fallback_to_whisper: payload.gemini_fallback_to_whisper,
-            file_tagging_enabled: payload.file_tagging_enabled,
-            gemini_pipelines: payload.gemini_pipelines,
-            mode_label: label.to_string(),
-            mode_description: desc.to_string(),
-        })
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
 }
 
 /// Performs only provider-agnostic safety validation on a non-empty API key.
@@ -498,53 +311,6 @@ pub fn get_recording_status(state: State<'_, SharedState>) -> crate::models::Rec
     state.recording_status()
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct AudioStorageConfig {
-    pub custom_directory: Option<String>,
-    pub effective_directory: String,
-    pub default_directory: String,
-}
-
-fn audio_storage_snapshot() -> Result<AudioStorageConfig, CommandError> {
-    let default = crate::audio_store::default_directory().ok_or_else(|| {
-        CommandError::Internal("armazenamento de áudio ainda não inicializado".to_string())
-    })?;
-    let effective = crate::audio_store::effective_directory().unwrap_or_else(|| default.clone());
-    Ok(AudioStorageConfig {
-        custom_directory: crate::settings::load_audio_directory(),
-        effective_directory: effective.to_string_lossy().into_owned(),
-        default_directory: default.to_string_lossy().into_owned(),
-    })
-}
-
-#[tauri::command]
-pub fn get_audio_storage_config() -> Result<AudioStorageConfig, CommandError> {
-    audio_storage_snapshot()
-}
-
-/// Changes only the destination for future audio files. Existing history
-/// entries retain their absolute paths and are neither moved nor deleted.
-#[tauri::command]
-pub async fn set_audio_storage_directory(
-    path: Option<String>,
-) -> Result<AudioStorageConfig, CommandError> {
-    tokio::task::spawn_blocking(move || {
-        let saved = match path.filter(|value| !value.trim().is_empty()) {
-            Some(path) => Some(
-                crate::audio_store::prepare_custom_directory(&path)
-                    .map_err(CommandError::InvalidPayload)?
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-            None => None,
-        };
-        crate::settings::save_audio_directory(saved).map_err(CommandError::Internal)?;
-        audio_storage_snapshot()
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
 /// Opens Windows Explorer with the persisted source audio selected. Resolving
 /// by history id keeps arbitrary paths out of the frontend IPC surface.
 #[tauri::command]
@@ -752,12 +518,9 @@ pub async fn get_insights(
     period: crate::insights::InsightPeriod,
 ) -> Result<crate::insights::InsightsResponse, CommandError> {
     let vocabulary = state.vocabulary.read().clone();
-    let developer_mode = crate::settings::load_dev_mode();
     tokio::task::spawn_blocking(move || {
         let mut response = crate::insights::snapshot(period, &vocabulary);
-        if !developer_mode {
-            response.redact_developer_details();
-        }
+        response.redact_developer_details();
         response
     })
     .await
@@ -986,32 +749,6 @@ pub fn get_recording_elapsed(state: State<'_, SharedState>) -> u64 {
     state.recording_elapsed_ms()
 }
 
-/// `get_dev_mode`
-///
-/// Returns the persisted developer-mode flag so the settings screen and the
-/// Histórico view can decide whether to expose the request-inspection panel.
-#[tauri::command]
-pub async fn get_dev_mode() -> Result<bool, CommandError> {
-    tokio::task::spawn_blocking(crate::settings::load_dev_mode)
-        .await
-        .map_err(|e| CommandError::Internal(e.to_string()))
-}
-
-/// `set_dev_mode`
-///
-/// Persists the developer-mode flag. Raw request/response details are removed
-/// from the history IPC payload while this flag is disabled.
-#[tauri::command]
-pub async fn set_dev_mode(value: bool) -> Result<(), CommandError> {
-    log::info!("set_dev_mode: {}", value);
-    tokio::task::spawn_blocking(move || {
-        crate::settings::save_dev_mode(value).map_err(CommandError::Internal)?;
-        Ok(())
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
 /// `get_run_as_admin`
 ///
 /// Returns the persisted preference and whether this process is elevated.
@@ -1046,174 +783,6 @@ pub async fn set_run_as_admin(value: bool) -> Result<(), CommandError> {
                 return Err(CommandError::Internal(error));
             }
         }
-        Ok(())
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
-#[tauri::command]
-pub fn get_context_preferences(
-    state: State<'_, SharedState>,
-) -> crate::context::ContextPreferences {
-    state.context_preferences.read().clone()
-}
-
-#[tauri::command]
-pub async fn set_context_preferences(
-    state: State<'_, SharedState>,
-    mut preferences: crate::context::ContextPreferences,
-) -> Result<crate::context::ContextPreferences, CommandError> {
-    preferences.max_context_chars = preferences.max_context_chars.clamp(100, 4_000);
-    let persisted = preferences.clone();
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_context_preferences(persisted.clone())?;
-        *shared.context_preferences.write() = persisted;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| CommandError::Internal(error.to_string()))?
-    .map_err(CommandError::Internal)?;
-    Ok(preferences)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OutputPolicyConfig {
-    pub formatting_level: crate::output_policy::FormattingLevel,
-    pub destination: crate::output_policy::DictationDestination,
-    #[serde(default)]
-    pub profiles: Vec<crate::output_policy::OutputProfile>,
-    #[serde(default)]
-    pub temporary_override: Option<String>,
-}
-
-#[tauri::command]
-pub fn get_output_policy_config(state: State<'_, SharedState>) -> OutputPolicyConfig {
-    OutputPolicyConfig {
-        formatting_level: *state.formatting_level.read(),
-        destination: *state.dictation_destination.read(),
-        profiles: state.output_profiles.read().clone(),
-        temporary_override: state.temporary_profile_override.read().clone(),
-    }
-}
-
-#[tauri::command]
-pub async fn set_output_policy_config(
-    state: State<'_, SharedState>,
-    config: OutputPolicyConfig,
-) -> Result<OutputPolicyConfig, CommandError> {
-    let mut ids = std::collections::HashSet::new();
-    for profile in &config.profiles {
-        let id = profile.id.trim();
-        if id.is_empty() || !ids.insert(id.to_ascii_lowercase()) {
-            return Err(CommandError::InvalidPayload(
-                "profile ids must be non-empty and unique".into(),
-            ));
-        }
-        if profile.name.trim().is_empty()
-            || profile
-                .style_instruction
-                .as_deref()
-                .is_some_and(|value| value.chars().count() > 2_000)
-        {
-            return Err(CommandError::InvalidPayload(
-                "invalid profile name or style instruction".into(),
-            ));
-        }
-    }
-    if let Some(override_id) = config.temporary_override.as_deref() {
-        if !config
-            .profiles
-            .iter()
-            .any(|profile| profile.enabled && profile.id == override_id)
-        {
-            return Err(CommandError::InvalidPayload(
-                "temporary override references an unavailable profile".into(),
-            ));
-        }
-    }
-
-    let persisted = config.clone();
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_output_policy(&persisted)?;
-        *shared.formatting_level.write() = persisted.formatting_level;
-        *shared.dictation_destination.write() = persisted.destination;
-        *shared.output_profiles.write() = persisted.profiles;
-        *shared.temporary_profile_override.write() = persisted.temporary_override;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| CommandError::Internal(error.to_string()))?
-    .map_err(CommandError::Internal)?;
-    Ok(config)
-}
-
-#[tauri::command]
-pub async fn get_scratchpad_notes() -> Result<Vec<crate::scratchpad::ScratchpadNote>, CommandError>
-{
-    tokio::task::spawn_blocking(crate::scratchpad::list)
-        .await
-        .map_err(|error| CommandError::Internal(error.to_string()))?
-        .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub async fn delete_scratchpad_note(id: String) -> Result<bool, CommandError> {
-    tokio::task::spawn_blocking(move || crate::scratchpad::delete(&id))
-        .await
-        .map_err(|error| CommandError::Internal(error.to_string()))?
-        .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub async fn get_snippets() -> Result<Vec<crate::snippets::VoiceSnippet>, CommandError> {
-    tokio::task::spawn_blocking(crate::snippets::list)
-        .await
-        .map_err(|error| CommandError::Internal(error.to_string()))?
-        .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub async fn set_snippets(
-    snippets: Vec<crate::snippets::VoiceSnippet>,
-) -> Result<Vec<crate::snippets::VoiceSnippet>, CommandError> {
-    tokio::task::spawn_blocking(move || crate::snippets::replace(snippets))
-        .await
-        .map_err(|error| CommandError::Internal(error.to_string()))?
-        .map_err(CommandError::InvalidPayload)
-}
-
-/// `get_sanitizer_enabled`
-///
-/// Returns whether the semantic validator (Stage 2 sanitization) is active.
-/// When disabled, the raw acoustic transcription is delivered to the clipboard
-/// without the Groq Chat Completions cleanup round-trip.
-#[tauri::command]
-pub fn get_sanitizer_enabled(state: State<'_, SharedState>) -> bool {
-    *state.sanitizer_enabled.read()
-}
-
-/// `set_sanitizer_enabled`
-///
-/// Toggles the semantic validator on/off and persists the choice to
-/// `settings.json`. Emitting the new value to the frontend is unnecessary
-/// here: the only consumer is the settings toggle itself, which already
-/// optimistically updated its local state.
-#[tauri::command]
-pub async fn set_sanitizer_enabled(
-    state: State<'_, SharedState>,
-    value: bool,
-) -> Result<(), CommandError> {
-    log::info!("set_sanitizer_enabled: {}", value);
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_sanitizer_enabled(value).map_err(CommandError::Internal)?;
-        *shared.sanitizer_enabled.write() = value;
         Ok(())
     })
     .await
@@ -1329,16 +898,6 @@ pub async fn retry_transcription(
     log::info!("retry_transcription: {}", id);
     let shared = state.inner().clone();
     crate::audio::retry_transcription_handler(&shared, &id)
-        .await
-        .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub async fn retry_transcription_with_fallback(
-    state: State<'_, SharedState>,
-    id: String,
-) -> Result<String, CommandError> {
-    crate::audio::retry_transcription_handler_with_strategy(state.inner(), &id, true)
         .await
         .map_err(CommandError::Internal)
 }
@@ -1481,7 +1040,7 @@ pub async fn get_history_page(
 pub fn get_history_detail(id: String) -> Result<crate::models::HistoryEntry, CommandError> {
     let mut entry = crate::history::get(&id)
         .ok_or_else(|| CommandError::Internal("Entrada não encontrada".into()))?;
-    if !crate::settings::load_dev_mode() {
+    {
         entry.debug_info = None;
         for run in &mut entry.pipeline_runs {
             run.debug_info = None;
@@ -1493,24 +1052,18 @@ pub fn get_history_detail(id: String) -> Result<crate::models::HistoryEntry, Com
     }
     Ok(entry)
 }
-#[tauri::command]
-pub fn restore_history_entry(id: String) -> Result<(), CommandError> {
-    crate::history::restore_entry(&id).map_err(CommandError::Internal)
-}
+/// Drops an incomplete trailing history transaction (crash mid-write),
+/// keeping a byte-exact backup. Offered from the Histórico load error.
 #[tauri::command]
 pub fn repair_history_journal() -> Result<(), CommandError> {
     crate::history::repair_journal().map_err(CommandError::Internal)
 }
 
 #[tauri::command]
-pub async fn get_local_diagnostics(
-    state: State<'_, SharedState>,
-) -> Result<crate::maintenance::Diagnostics, CommandError> {
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || crate::maintenance::diagnostics(&shared))
-        .await
-        .map_err(|e| CommandError::Internal(e.to_string()))
+pub fn list_recovery_audio() -> Vec<crate::maintenance::RecoveryAudio> {
+    crate::maintenance::list_recovery_audio()
 }
+
 #[tauri::command]
 pub async fn retry_recovery_audio(
     state: State<'_, SharedState>,
@@ -1520,72 +1073,6 @@ pub async fn retry_recovery_audio(
         .await
         .map_err(CommandError::Internal)
 }
-#[tauri::command]
-pub async fn export_local_data(
-    app: tauri::AppHandle,
-    state: State<'_, SharedState>,
-    destination: String,
-    include_audio: Option<bool>,
-) -> Result<(), CommandError> {
-    let lease = state
-        .operations
-        .begin("export")
-        .map_err(CommandError::Internal)?;
-    tokio::task::spawn_blocking(move || {
-        let _lease = lease;
-        let _config = crate::models::CONFIG_LOCK.lock();
-        crate::maintenance::export(
-            &app,
-            std::path::Path::new(&destination),
-            include_audio.unwrap_or(false),
-        )
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-    .map_err(CommandError::Internal)
-}
-#[tauri::command]
-pub async fn import_local_data(
-    app: tauri::AppHandle,
-    state: State<'_, SharedState>,
-    source: String,
-) -> Result<usize, CommandError> {
-    let _lease = state
-        .operations
-        .begin("import")
-        .map_err(CommandError::Internal)?;
-    let shared = state.inner().clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let _config = crate::models::CONFIG_LOCK.lock();
-        let result = crate::maintenance::import_history(&app, std::path::Path::new(&source))?;
-        *shared.vocabulary.write() = crate::settings::load_vocabulary();
-        *shared.output_profiles.write() = crate::settings::load_output_profiles();
-        Ok::<_, String>(result)
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-    .map_err(CommandError::Internal)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn archive_history_audio(
-    state: State<'_, SharedState>,
-    id: String,
-    destination: String,
-) -> Result<String, CommandError> {
-    let _lease = state
-        .operations
-        .begin("archive")
-        .map_err(CommandError::Internal)?;
-    tokio::task::spawn_blocking(move || {
-        crate::maintenance::archive_audio(&id, std::path::Path::new(&destination))
-    })
-    .await
-    .map_err(|e| CommandError::Internal(e.to_string()))?
-    .map_err(CommandError::Internal)
-}
-
 #[tauri::command]
 pub fn get_feature_settings(state: State<'_, SharedState>) -> crate::assist::FeatureSettings {
     state.features.read().clone()
@@ -1606,36 +1093,6 @@ pub async fn set_feature_settings(
     .await
     .map_err(|error| CommandError::Internal(error.to_string()))?
     .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub fn get_local_model_status(
-    model: crate::local_whisper::LocalModel,
-) -> crate::local_whisper::LocalModelStatus {
-    crate::local_whisper::status(model)
-}
-
-/// Downloads the offline Whisper model, emitting `local-model-progress`.
-#[tauri::command]
-pub async fn download_local_model(
-    app: tauri::AppHandle,
-    model: crate::local_whisper::LocalModel,
-) -> Result<crate::local_whisper::LocalModelStatus, CommandError> {
-    crate::local_whisper::download(model, |progress| {
-        let _ = tauri::Emitter::emit(&app, "local-model-progress", &progress);
-    })
-    .await
-    .map_err(CommandError::Internal)
-}
-
-#[tauri::command]
-pub async fn remove_local_model(
-    model: crate::local_whisper::LocalModel,
-) -> Result<crate::local_whisper::LocalModelStatus, CommandError> {
-    tokio::task::spawn_blocking(move || crate::local_whisper::remove(model))
-        .await
-        .map_err(|error| CommandError::Internal(error.to_string()))?
-        .map_err(CommandError::Internal)
 }
 
 #[tauri::command]

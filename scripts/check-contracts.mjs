@@ -14,7 +14,7 @@ const declared = [...build.matchAll(/^\s+"(\w+)",?$/gm)].map((match) => match[1]
 assert.deepEqual([...handlers].sort(), [...declared].sort(), "Custom commands must be declared in AppManifest");
 assert.deepEqual(main.windows, ["main"]); assert.deepEqual(gadget.windows, ["gadget"]);
 for (const handler of handlers) assert(main.permissions.includes(`allow-${handler.replaceAll("_", "-")}`), `Missing main permission: ${handler}`);
-for (const forbidden of ["allow-get-api-keys", "allow-save-api-keys", "allow-import-local-data", "allow-set-output-policy-config"]) assert(!gadget.permissions.includes(forbidden));
+for (const forbidden of ["allow-get-api-keys", "allow-save-api-keys", "allow-set-transcription-route"]) assert(!gadget.permissions.includes(forbidden));
 assert(!cargo.match(/features\s*=\s*\[[^\]]*"devtools"/));
 assert(!config.app.security.csp.includes("unsafe-eval"));
 assert((await read("README.md")).includes(pkg.version));
