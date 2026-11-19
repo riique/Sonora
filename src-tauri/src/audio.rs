@@ -253,7 +253,6 @@ pub fn start_capture(
 
     let context = crate::context::capture(&crate::context::ContextPreferences::default());
     let profile = crate::output_policy::ResolvedOutputProfile::default();
-    let screenshot_hwnd = context.foreground_hwnd;
     let pending_session = crate::pipeline_run::RecordingSession {
         id: session_id.to_string(),
         started_at_ms,
@@ -267,8 +266,6 @@ pub fn start_capture(
     if !state.install_recording_capture(generation, fresh_stream, pending_session) {
         return Err(AudioError::Superseded);
     }
-
-    crate::smart_context::start(state, session_id, screenshot_hwnd);
 
     // Keep capture local until the silence check at stop. The legacy streaming
     // transport opens only after audio has been admitted.
@@ -441,7 +438,6 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
     struct RecordingSessionGuard(Arc<AppState>);
     impl Drop for RecordingSessionGuard {
         fn drop(&mut self) {
-            crate::smart_context::discard(&self.0);
             self.0.recording_session.lock().take();
         }
     }
@@ -501,18 +497,25 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
         crate::audio_processing::enhance_microphone_audio(&resampled_samples, TARGET_SAMPLE_RATE);
     if processing.applied {
         log::info!(
-            "audio: noise-aware gain applied ({:+.1} dB, active {:.1}->{:.1} dBFS, peak {:.1}->{:.1} dBFS, noise floor {:.1} dBFS, active {:.1}%)",
+            "audio: dynamic leveling applied (mean {:+.1} dB [{:+.1}..{:+.1} dB], active {:.1}->{:.1} dBFS, spread {:.1}->{:.1} dB, peak {:.1}->{:.1} dBFS, noise floor {:.1} dBFS, dc_removed={}, active {:.1}%)",
             processing.gain_db,
+            processing.min_gain_db,
+            processing.max_gain_db,
             processing.active_rms_before_dbfs,
             processing.active_rms_after_dbfs,
+            processing.dynamic_spread_before_db,
+            processing.dynamic_spread_after_db,
             processing.peak_before_dbfs,
             processing.peak_after_dbfs,
             processing.noise_floor_dbfs,
+            processing.dc_removed,
             processing.active_frame_percent,
         );
     } else {
         log::info!(
-            "audio: noise-aware gain skipped (noise floor {:.1} dBFS, speech threshold {:.1} dBFS, active {:.1}%, peak {:.1} dBFS)",
+            "audio: original audio preserved (active {:.1} dBFS, spread {:.1} dB, noise floor {:.1} dBFS, speech threshold {:.1} dBFS, active {:.1}%, peak {:.1} dBFS)",
+            processing.active_rms_before_dbfs,
+            processing.dynamic_spread_before_db,
             processing.noise_floor_dbfs,
             processing.speech_threshold_dbfs,
             processing.active_frame_percent,
@@ -562,7 +565,6 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 ..Default::default()
             },
         );
-        crate::smart_context::finish(state).await;
         match crate::transcription::run_product_mode_with_duration(
             state,
             wav,
@@ -1305,7 +1307,6 @@ pub(crate) fn now_timestamp() -> String {
 /// Discards the recording without building a WAV buffer and releases (or
 /// keeps ready) the input stream. Used by the panic shortcut.
 pub fn cancel_capture(state: &Arc<AppState>) {
-    crate::smart_context::discard(state);
     state.capture_spool.lock().take();
     crate::mic_ready::release_after_capture(state);
     state.clear_audio_buffer();

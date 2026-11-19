@@ -1,7 +1,5 @@
-//! Short text-only LLM calls: the voice command ("rewrite the selection").
-//!
-//! Uses the cheapest fast model available with the user's keys: OpenRouter
-//! first, then Google AI Studio.
+//! Short OpenRouter LLM calls: voice command ("rewrite the selection") and
+//! pronunciation evaluation.
 
 use std::time::Duration;
 
@@ -9,8 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::AppState;
 
-const OPENROUTER_TEXT_MODEL: &str = "google/gemini-3.5-flash-lite";
-const GOOGLE_TEXT_MODEL: &str = "gemini-3.5-flash-lite";
+const OPENROUTER_TEXT_MODEL: &str = "openai/gpt-4o-mini";
+const OPENROUTER_PRONUNCIATION_MODEL: &str = "openai/gpt-audio-mini";
 
 /// Persisted toggles for the optional assistance features.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,57 +56,21 @@ pub async fn text_llm(
     user: &str,
     timeout: Duration,
 ) -> Result<LlmText, String> {
-    let mut last_error = None;
-    if let Some(key) = state.next_openrouter_key() {
-        match crate::openrouter::generate_text(system, user, OPENROUTER_TEXT_MODEL, &key, timeout)
-            .await
-        {
-            Ok(out) => {
-                return Ok(LlmText {
-                    text: out.text,
-                    provider: "openrouter",
-                    model: OPENROUTER_TEXT_MODEL,
-                    duration_ms: out.request_ms,
-                    cost_usd: out.reported_cost_usd,
-                    input_tokens: out.reported_input_tokens.map(|value| value as u64),
-                    output_tokens: out.reported_output_tokens.map(|value| value as u64),
-                })
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-    if let Some(key) = state.next_google_key() {
-        let body = crate::gemini::client::GenerateContentRequest::with_parts(vec![
-            crate::gemini::client::Part::Text {
-                text: user.to_string(),
-            },
-        ])
-        .with_system_instruction(system);
-        match crate::gemini::client::generate_content_with_model(
-            &key,
-            GOOGLE_TEXT_MODEL,
-            &body,
-            timeout,
-        )
-        .await
-        {
-            Ok(out) => {
-                return Ok(LlmText {
-                    text: out.text.trim().to_string(),
-                    provider: "google-ai-studio",
-                    model: GOOGLE_TEXT_MODEL,
-                    duration_ms: out.duration_ms,
-                    cost_usd: None,
-                    input_tokens: out.usage.input_tokens,
-                    output_tokens: out.usage.output_tokens,
-                })
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-    Err(last_error.unwrap_or_else(|| {
-        "Configure uma chave do OpenRouter ou do Google em Provedores e APIs.".into()
-    }))
+    let api_key = state
+        .next_openrouter_key()
+        .ok_or_else(|| "Configure uma chave do OpenRouter em Ajustes → Transcrição.".to_string())?;
+    let out =
+        crate::openrouter::generate_text(system, user, OPENROUTER_TEXT_MODEL, &api_key, timeout)
+            .await?;
+    Ok(LlmText {
+        text: out.text,
+        provider: "openrouter",
+        model: OPENROUTER_TEXT_MODEL,
+        duration_ms: out.request_ms,
+        cost_usd: out.reported_cost_usd,
+        input_tokens: out.reported_input_tokens.map(|value| value as u64),
+        output_tokens: out.reported_output_tokens.map(|value| value as u64),
+    })
 }
 
 const COMMAND_SYSTEM: &str = "Você é o modo comando de um app de ditado. O usuário falou uma \
@@ -135,6 +97,66 @@ pub async fn run_command(
     text_llm(state, &system, &user, Duration::from_secs(45)).await
 }
 
+const PRONUNCIATION_SYSTEM: &str =
+    "Você é um avaliador internacional de proficiência oral e comunicação. \
+Responda em português do Brasil, em Markdown, sem introduções fora da estrutura pedida.";
+
+pub fn pronunciation_prompt(transcript: &str) -> String {
+    format!(
+        "Analise o áudio como um avaliador internacional de proficiência oral e \
+comunicação.\n\n\
+Objetivo da avaliação:\n\
+- medir inteligibilidade, pronúncia, fluência, ritmo, entonação, gramática \
+oral, vocabulário, coesão, naturalidade, segurança e adequação ao contexto;\n\
+- dar uma nota geral (0 a 10, com 1 casa decimal);\n\
+- classificar o desempenho na escala internacional CEFR (A1, A2, B1, B2, C1, C2);\n\
+- indicar a proximidade de fala nativa (0 a 100) e confiança da avaliação (baixa, média ou alta).\n\n\
+Regras:\n\
+1. Priorize o áudio como fonte principal e use a transcrição apenas como apoio.\n\
+2. Se o áudio estiver curto demais, ruim, com ruído forte ou insuficiente, diga isso explicitamente e reduza a confiança.\n\
+3. Não invente palavras, contexto ou sotaque que o áudio não sustente.\n\
+4. Seja específico, direto, técnico e construtivo.\n\n\
+Estrutura obrigatória:\n\
+## Resumo Executivo\n\
+## Placar\n\
+## Forças\n\
+## Pontos de Atenção\n\
+## Pronúncia e Inteligibilidade\n\
+## Fluência e Ritmo\n\
+## Plano de Melhoria\n\
+## Veredito Final\n\n\
+Transcrição de referência (apoio):\n\"\"\"\n{}\n\"\"\"",
+        transcript
+    )
+}
+
+/// Evaluates oral pronunciation via OpenRouter's audio-capable model.
+pub async fn evaluate_pronunciation(
+    audio_bytes: &[u8],
+    ext: &str,
+    transcript: &str,
+    openrouter_api_key: &str,
+) -> Result<String, String> {
+    if audio_bytes.is_empty() {
+        return Err("áudio vazio; não é possível avaliar a pronúncia".to_string());
+    }
+    let prompt = pronunciation_prompt(transcript);
+    let out = crate::openrouter::generate_with_audio(
+        audio_bytes,
+        ext,
+        PRONUNCIATION_SYSTEM,
+        &prompt,
+        OPENROUTER_PRONUNCIATION_MODEL,
+        openrouter_api_key,
+        Duration::from_secs(90),
+    )
+    .await?;
+    if out.text.trim().is_empty() {
+        return Err("O modelo não retornou nenhum feedback de pronúncia.".into());
+    }
+    Ok(out.text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +167,11 @@ mod tests {
         assert!(with.contains("[TEXTO SELECIONADO]\noi tudo bem"));
         let (_, without) = command_prompt("escreva um e-mail", Some("  "));
         assert!(!without.contains("SELECIONADO"));
+    }
+
+    #[test]
+    fn assist_uses_non_gemini_openrouter_models() {
+        assert!(!OPENROUTER_TEXT_MODEL.contains("gemini"));
+        assert!(!OPENROUTER_PRONUNCIATION_MODEL.contains("gemini"));
     }
 }

@@ -39,13 +39,13 @@ test("file dialog failure becomes visible", async () => {
 test("home shows the single transcription route and quick shortcuts", async () => {
   bridge.invoke.mockImplementation(async (command: string) => ({
     get_history_page: { items: [], total: 0, total_words: 0 },
-    get_transcription_route: { provider: "open-router", model: "transcribe35" },
+    get_transcription_route: { provider: "assemblyai", model: "assemblyai-stt-3-7", use_custom_model: false, custom_model: "" },
     get_shortcuts: { toggle: "Control+B", cancel: "Control+Q" },
     get_recording_status: { phase: "idle", recording: false, revision: 0 },
   }[command]));
   await act(async () => root.render(<InicioView onNavigate={() => {}} />));
   expect(host.querySelectorAll("select")).toHaveLength(0);
-  expect(host.textContent).toContain("Gemini 3.5 Transcribe via OpenRouter");
+  expect(host.textContent).toContain("AssemblyAI-STT-3.7 via AssemblyAI");
   expect(host.textContent).toContain("Pronto para ditar");
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });

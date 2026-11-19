@@ -18,17 +18,22 @@ import { formatClock, Tally, useElapsed, type OnAirState } from "../recording/us
 import type { Navigate } from "./index";
 
 const MODEL_LABELS: Record<TranscriptionRoute["model"], string> = {
-  transcribe35: "Gemini 3.5 Transcribe",
-  "flash-lite35": "Gemini 3.5 Flash-Lite",
-  flash36: "Gemini 3.6 Flash",
+  "assemblyai-stt-3-7": "AssemblyAI-STT-3.7",
   "assemblyai-universal-3-6-pro": "AssemblyAI Universal-3.6 Pro",
+  "openai-whisper-large-v3": "OpenAI Whisper Large v3",
+  "openai-whisper-large-v3-turbo": "OpenAI Whisper Large v3 Turbo",
+  "openai-gpt-4o-transcribe": "OpenAI GPT-4o Transcribe",
+  "openai-gpt-4o-mini-transcribe": "OpenAI GPT-4o Mini Transcribe",
 };
 
 /** One readable line describing the active route: model and provider. */
 export function routeSummary(route: TranscriptionRoute | null): string {
   if (!route) return "";
-  const provider = route.provider === "open-router" ? "OpenRouter" : "Google AI Studio";
-  return `${MODEL_LABELS[route.model] ?? route.model} via ${provider}`;
+  const provider = route.provider === "open-router" ? "OpenRouter" : "AssemblyAI";
+  const modelLabel = route.provider === "open-router" && route.use_custom_model && route.custom_model?.trim()
+    ? route.custom_model.trim()
+    : (MODEL_LABELS[route.model] ?? route.model);
+  return `${modelLabel} via ${provider}`;
 }
 
 const HEADLINE: Record<OnAirState, string> = {

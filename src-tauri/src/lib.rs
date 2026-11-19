@@ -1,3 +1,4 @@
+pub mod assemblyai;
 pub mod assist;
 pub mod audio;
 pub mod audio_processing;
@@ -6,7 +7,6 @@ pub mod capture_spool;
 pub mod commands;
 pub mod context;
 pub mod elevation;
-pub mod gemini;
 pub mod history;
 pub mod insights;
 pub mod insights_intelligence;
@@ -25,7 +25,6 @@ pub mod secrets;
 pub mod settings;
 pub mod shortcuts;
 pub mod single_instance;
-pub mod smart_context;
 pub mod speech_presence;
 pub mod storage;
 pub mod transcription;
@@ -1475,8 +1474,8 @@ pub fn run() {
                         *state.widget_dock.write() = settings::load_widget_dock();
 
                         *state.vocabulary.write() = settings::load_vocabulary();
-                        *state.gemini_pipelines.write() = settings::load_gemini_pipelines();
-                        *state.smart_context_config.write() = settings::load_smart_context_config();
+                        *state.transcription_pipelines.write() =
+                            settings::load_transcription_pipelines();
                         *state.features.write() = settings::load_features();
                         insights::start_backfill(app.handle().clone());
                     }
@@ -1550,8 +1549,6 @@ pub fn run() {
             commands::get_api_keys,
             commands::get_transcription_route,
             commands::set_transcription_route,
-            commands::get_smart_context_config,
-            commands::set_smart_context_config,
             commands::list_recovery_audio,
             commands::repair_history_journal,
             commands::transcribe_file,

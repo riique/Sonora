@@ -155,9 +155,9 @@ pub fn mask(keys: &ApiKeys) -> ApiKeys {
     };
     ApiKeys {
         groq: map("groq", &keys.groq),
-        google: map("google", &keys.google),
         deepgram: map("deepgram", &keys.deepgram),
         openrouter: map("openrouter", &keys.openrouter),
+        assemblyai: map("assemblyai", &keys.assemblyai),
         meta: map("meta", &keys.meta),
     }
 }
@@ -190,11 +190,14 @@ mod tests {
     #[test]
     fn references_reject_stale_and_cross_provider_values() {
         let keys = vec!["synthetic-test-credential".to_string()];
-        let token = reference("google", &keys[0]);
+        let token = reference("assemblyai", &keys[0]);
         assert!(!token.contains(&keys[0]));
-        assert_eq!(resolve("google", vec![token.clone()], &keys).unwrap(), keys);
-        assert!(resolve("groq", vec![token.clone()], &keys).is_err());
-        assert!(resolve("google", vec![token], &[]).is_err());
+        assert_eq!(
+            resolve("assemblyai", vec![token.clone()], &keys).unwrap(),
+            keys
+        );
+        assert!(resolve("openrouter", vec![token.clone()], &keys).is_err());
+        assert!(resolve("assemblyai", vec![token], &[]).is_err());
     }
     #[cfg(windows)]
     #[test]

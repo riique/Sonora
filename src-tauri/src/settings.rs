@@ -47,10 +47,8 @@ struct Settings {
     /// paste into apps running as administrator (UIPI blocks it otherwise).
     #[serde(default)]
     run_as_admin: bool,
-    #[serde(default)]
-    gemini_pipelines: crate::pipeline_contract::GeminiPipelineConfig,
-    #[serde(default)]
-    smart_context_config: crate::smart_context::Config,
+    #[serde(default, alias = "transcription_pipelines")]
+    gemini_pipelines: crate::pipeline_contract::TranscriptionPipelineConfig,
     /// Optional absolute directory for future source-audio files. Existing
     /// history entries keep their own absolute paths when this changes.
     #[serde(default)]
@@ -174,7 +172,7 @@ pub fn save_run_as_admin(value: bool) -> Result<(), String> {
 
 /// Persists the single transcription route (always the Fast & Accurate mode).
 pub fn save_transcription_route(
-    route: crate::pipeline_contract::GeminiPipelineChoice,
+    route: crate::pipeline_contract::TranscriptionRoute,
 ) -> Result<(), String> {
     update(|s| {
         s.gemini_pipelines.fast_accurate = route;
@@ -212,16 +210,8 @@ pub fn load_widget_display() -> Option<String> {
         .filter(|value| !value.trim().is_empty())
 }
 
-pub fn load_gemini_pipelines() -> crate::pipeline_contract::GeminiPipelineConfig {
+pub fn load_transcription_pipelines() -> crate::pipeline_contract::TranscriptionPipelineConfig {
     read().gemini_pipelines.clone()
-}
-
-pub fn load_smart_context_config() -> crate::smart_context::Config {
-    read().smart_context_config
-}
-
-pub fn save_smart_context_config(config: crate::smart_context::Config) -> Result<(), String> {
-    update(|s| s.smart_context_config = config)
 }
 
 pub fn load_audio_directory() -> Option<String> {

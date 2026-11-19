@@ -22,9 +22,9 @@ import {
   getApiKeys,
   saveApiKeys,
   type CorrectionEvent,
-  type GeminiModel,
-  type GeminiProvider,
   type MicReadyMode,
+  type TranscriptionModel,
+  type TranscriptionProvider,
   type TranscriptionRoute,
   type VocabularyTerm,
   type VocabularyCategory,
@@ -35,7 +35,6 @@ import { Button } from "../components/ui/Button";
 import { Input, Select } from "../components/ui/Input";
 import { Toggle } from "../components/ui/Toggle";
 import { EmptyState, ErrorState, PageHeader, PreferenceRow, RowGroup, Section, Segmented } from "../components/ui/Surface";
-import { SmartContextSettings } from "./SmartContextSettings";
 import { UpdatesSection } from "./UpdatesSection";
 import { useFeatures } from "../lib/useFeatures";
 import { ShortcutSettings } from "./AtalhosView";
@@ -261,19 +260,34 @@ function GeralTab() {
 
 /* ------------------------------- Transcrição ------------------------------- */
 
-const MODELS: { id: GeminiModel; label: string; openRouterOnly?: boolean }[] = [
-  { id: "assemblyai-universal-3-6-pro", label: "AssemblyAI Universal-3.6 Pro", openRouterOnly: true },
-  { id: "transcribe35", label: "Gemini 3.5 Transcribe" },
-  { id: "flash-lite35", label: "Gemini 3.5 Flash-Lite" },
-  { id: "flash36", label: "Gemini 3.6 Flash" },
+const DIRECT_ASSEMBLYAI_MODELS: { id: TranscriptionModel; label: string }[] = [
+  { id: "assemblyai-stt-3-7", label: "AssemblyAI-STT-3.7 (assemblyai-stt-3-7)" },
 ];
+
+const OPENROUTER_MODELS: { id: TranscriptionModel; label: string }[] = [
+  { id: "assemblyai-universal-3-6-pro", label: "AssemblyAI Universal-3.6 Pro" },
+  { id: "openai-whisper-large-v3", label: "OpenAI Whisper Large v3" },
+  { id: "openai-whisper-large-v3-turbo", label: "OpenAI Whisper Large v3 Turbo" },
+  { id: "openai-gpt-4o-transcribe", label: "OpenAI GPT-4o Transcribe" },
+  { id: "openai-gpt-4o-mini-transcribe", label: "OpenAI GPT-4o Mini Transcribe" },
+];
+
+const CUSTOM_MODEL_OPTION = "__custom__";
 
 function TranscricaoTab() {
   const [route, setRoute] = useState<TranscriptionRoute | null>(null);
+  const [customDraft, setCustomDraft] = useState("");
+  const [customOpen, setCustomOpen] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    getTranscriptionRoute().then(setRoute).catch((e) => setStatus({ ok: false, text: String(e) }));
+    getTranscriptionRoute()
+      .then((loaded) => {
+        setRoute(loaded);
+        setCustomDraft(loaded.custom_model ?? "");
+        setCustomOpen(loaded.provider === "open-router" && Boolean(loaded.use_custom_model));
+      })
+      .catch((e) => setStatus({ ok: false, text: String(e) }));
   }, []);
 
   useEffect(() => {
@@ -282,20 +296,41 @@ function TranscricaoTab() {
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  const updateRoute = (patch: Partial<TranscriptionRoute>) => {
-    if (!route) return;
-    const next = { ...route, ...patch };
+  const persistRoute = (next: TranscriptionRoute) => {
     setRoute(next);
     setTranscriptionRoute(next)
-      .then(() => setStatus({ ok: true, text: "Salvo" }))
+      .then((saved) => {
+        setRoute(saved);
+        setCustomDraft(saved.custom_model ?? "");
+        setCustomOpen(saved.provider === "open-router" && Boolean(saved.use_custom_model));
+        setStatus({ ok: true, text: "Salvo" });
+      })
       .catch((e) => setStatus({ ok: false, text: String(e) }));
   };
+
+  const saveCustomModel = () => {
+    if (!route) return;
+    persistRoute({
+      ...route,
+      provider: "open-router",
+      use_custom_model: true,
+      custom_model: customDraft.trim(),
+    });
+  };
+
+  const selectedModelValue = route?.provider === "open-router" && customOpen
+    ? CUSTOM_MODEL_OPTION
+    : route?.model ?? "assemblyai-stt-3-7";
+
+  const availableModels = route?.provider === "open-router"
+    ? OPENROUTER_MODELS
+    : DIRECT_ASSEMBLYAI_MODELS;
 
   return (
     <div>
       <Section
         title="Modelo"
-        description="Se o modelo falhar, o Sonora usa o Whisper pelo OpenRouter e marca isso no Histórico."
+        description="Use AssemblyAI-STT-3.7 diretamente pela API oficial ou compare com modelos do OpenRouter (como Universal-3.6 Pro) e qualquer ID customizado compatível. Em caso de falha do provedor, o Whisper pelo OpenRouter atua como reserva."
         action={status && <span role="status" className={"inline-flex items-center gap-1.5 text-[12px] " + (status.ok ? "text-cue" : "text-live")}>{status.ok && <Check className="h-3.5 w-3.5" aria-hidden />}{status.text}</span>}
       >
         {route ? (
@@ -303,35 +338,94 @@ function TranscricaoTab() {
             <PreferenceRow title="Provedor" htmlFor="route-provider">
               <Select
                 id="route-provider"
-                className="w-[220px]"
+                className="w-[240px]"
                 value={route.provider}
                 onChange={(e) => {
-                  const provider = e.target.value as GeminiProvider;
-                  const openRouterOnly = MODELS.find((m) => m.id === route.model)?.openRouterOnly;
-                  updateRoute(provider === "google-ai-studio" && openRouterOnly ? { provider, model: "transcribe35" } : { provider });
+                  const provider = e.target.value as TranscriptionProvider;
+                  if (provider === "assemblyai") {
+                    setCustomOpen(false);
+                    persistRoute({
+                      ...route,
+                      provider,
+                      model: "assemblyai-stt-3-7",
+                      use_custom_model: false,
+                    });
+                  } else {
+                    const nextModel = OPENROUTER_MODELS.some((m) => m.id === route.model)
+                      ? route.model
+                      : "assemblyai-universal-3-6-pro";
+                    setCustomOpen(false);
+                    persistRoute({
+                      ...route,
+                      provider,
+                      model: nextModel,
+                      use_custom_model: false,
+                    });
+                  }
                 }}
               >
+                <option value="assemblyai">AssemblyAI (API direta)</option>
                 <option value="open-router">OpenRouter</option>
-                <option value="google-ai-studio">Google AI Studio</option>
               </Select>
             </PreferenceRow>
             <PreferenceRow title="Modelo" htmlFor="route-model">
               <Select
                 id="route-model"
-                className="w-[220px]"
-                value={route.model}
-                onChange={(e) => updateRoute({ model: e.target.value as GeminiModel })}
+                className="w-[240px]"
+                value={selectedModelValue}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === CUSTOM_MODEL_OPTION) {
+                    setCustomOpen(true);
+                    setStatus(null);
+                    return;
+                  }
+                  setCustomOpen(false);
+                  persistRoute({
+                    ...route,
+                    model: value as TranscriptionModel,
+                    use_custom_model: false,
+                  });
+                }}
               >
-                {MODELS.filter((m) => route.provider === "open-router" || !m.openRouterOnly).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {availableModels.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {route.provider === "open-router" && (
+                  <option value={CUSTOM_MODEL_OPTION}>ID customizado do OpenRouter…</option>
+                )}
               </Select>
             </PreferenceRow>
+            {route.provider === "open-router" && customOpen && (
+              <PreferenceRow
+                title="ID customizado"
+                description="Informe qualquer ID compatível no formato provedor/modelo (ex.: assemblyai/universal-3-6-pro ou openai/whisper-large-v3)."
+                htmlFor="route-custom-model"
+              >
+                <div className="flex w-[320px] max-w-full gap-2">
+                  <Input
+                    id="route-custom-model"
+                    placeholder="provedor/modelo"
+                    value={customDraft}
+                    onChange={(e) => setCustomDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        saveCustomModel();
+                      }
+                    }}
+                    spellCheck={false}
+                    className="font-mono text-[12px]"
+                  />
+                  <Button size="sm" variant="primary" disabled={!customDraft.trim()} onClick={saveCustomModel}>
+                    Salvar
+                  </Button>
+                </div>
+              </PreferenceRow>
+            )}
           </RowGroup>
         ) : (
           <p className="text-[13px] text-muted">Carregando…</p>
         )}
       </Section>
-
-      {route?.model === "assemblyai-universal-3-6-pro" && <SmartContextSettings />}
 
       <Section title="Chaves de API" description="Ficam neste computador, protegidas pela sua conta do Windows. Uma chave salva pode ser substituída ou removida, mas nunca é exibida de volta.">
         <ProvedoresList />
@@ -342,15 +436,15 @@ function TranscricaoTab() {
 
 /* ------------------------------- Provedores ------------------------------- */
 
-type KeyId = "openrouter" | "google";
+type KeyId = "assemblyai" | "openrouter";
 
 const PROVIDERS: { id: KeyId; name: string; placeholder: string; usedBy: string }[] = [
-  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Transcrição pelo OpenRouter, Whisper de reserva, comando de voz e retrato da voz" },
-  { id: "google", name: "Google Gemini", placeholder: "AIza…", usedBy: "Transcrição pelo Google AI Studio e comando de voz" },
+  { id: "assemblyai", name: "AssemblyAI", placeholder: "Chave da API da AssemblyAI…", usedBy: "Transcrição direta com AssemblyAI-STT-3.7" },
+  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Universal-3.6 Pro, Whisper, IDs customizados, reserva, comando de voz e retrato da voz" },
 ];
 
 function ProvedoresList() {
-  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ google: [], openrouter: [] });
+  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ assemblyai: [], openrouter: [] });
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<KeyId | null>(null);
   const [saved, setSaved] = useState<KeyId | null>(null);
@@ -359,7 +453,7 @@ function ProvedoresList() {
 
   useEffect(() => {
     getApiKeys()
-      .then((k) => setKeys({ google: k.google ?? [], openrouter: k.openrouter ?? [] }))
+      .then((k) => setKeys({ assemblyai: k.assemblyai ?? [], openrouter: k.openrouter ?? [] }))
       .catch(console.error);
   }, []);
 

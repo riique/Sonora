@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 // ─── Modes & content ────────────────────────────────────────────────────────
 
-/// Product-facing transcription mode (future selector).
+/// Product-facing transcription mode.
 ///
 /// Wire ids are stable kebab-case for settings.json / IPC.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
@@ -16,11 +16,11 @@ pub enum TranscriptionMode {
     /// Whisper through OpenRouter's dedicated STT endpoint.
     #[default]
     UltraFast,
-    /// Gemini with audio.
+    /// Primary configured audio transcription route.
     FastAccurate,
-    /// Whisper + Gemini with audio.
+    /// Legacy multi-stage mode (kept for history deserialization).
     Precise,
-    /// Whisper + sanitizer + Gemini with audio.
+    /// Legacy multi-stage mode (kept for history deserialization).
     UltraPrecise,
 }
 
@@ -54,7 +54,7 @@ impl TranscriptionMode {
     }
 }
 
-/// Optional content hint for future prompt routing (not applied yet).
+/// Optional content hint for future prompt routing.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ContentType {
@@ -101,65 +101,156 @@ impl ContentType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+// ─── Transcription provider & model catalog ─────────────────────────────────
+
+/// Supported transcription providers:
+/// - `AssemblyAi`: direct AssemblyAI pre-recorded API (`assemblyai-stt-3-7`)
+/// - `OpenRouter`: OpenRouter transcription models + any compatible custom ID
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum GeminiModel {
-    /// Older installs may still carry the removed Meta model; they fall back
-    /// to the default preset.
+pub enum TranscriptionProvider {
     #[default]
-    #[serde(alias = "muse-voice-transcribe-1.0", alias = "muse-voice-transcribe")]
-    FlashLite35,
-    Flash36,
-    #[serde(alias = "gemini-3.5-transcribe", alias = "transcribe-35")]
-    Transcribe35,
-    /// AssemblyAI Universal-3.6 Pro. Served only through OpenRouter's
-    /// speech-to-text endpoint (vocabulary and smart context as keyterms).
-    #[serde(rename = "assemblyai-universal-3-6-pro")]
-    AssemblyAiUniversal36Pro,
-}
-
-impl GeminiModel {
-    pub fn google_id(self) -> &'static str {
-        match self {
-            Self::FlashLite35 => "gemini-3.5-flash-lite",
-            Self::Flash36 => "gemini-3.6-flash",
-            Self::Transcribe35 => "gemini-3.5-transcribe",
-            // Not offered by Google AI Studio; the UI never pairs them.
-            Self::AssemblyAiUniversal36Pro => "gemini-3.5-transcribe",
-        }
-    }
-
-    pub fn openrouter_id(self) -> &'static str {
-        match self {
-            Self::FlashLite35 => "google/gemini-3.5-flash-lite",
-            Self::Flash36 => "google/gemini-3.6-flash",
-            Self::Transcribe35 => "google/gemini-3.5-transcribe",
-            Self::AssemblyAiUniversal36Pro => "assemblyai/universal-3-6-pro",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum GeminiProvider {
-    #[default]
-    GoogleAiStudio,
-    /// The removed Meta provider migrates to OpenRouter.
-    #[serde(alias = "meta")]
+    #[serde(rename = "assemblyai")]
+    AssemblyAi,
     OpenRouter,
 }
 
-/// The audio model used for every dictation.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-pub struct GeminiPipelineChoice {
-    pub model: GeminiModel,
-    pub provider: GeminiProvider,
+impl<'de> Deserialize<'de> for TranscriptionProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "assemblyai" | "assembly-ai" => Ok(Self::AssemblyAi),
+            "open-router" | "openrouter" | "meta" => Ok(Self::OpenRouter),
+            // Legacy Google AI Studio installs migrate safely to direct AssemblyAI.
+            "google-ai-studio" => Ok(Self::AssemblyAi),
+            _ => Err(serde::de::Error::unknown_variant(
+                &value,
+                &["assemblyai", "open-router"],
+            )),
+        }
+    }
 }
 
-/// Older versions stored free-form model ids. The AssemblyAI id maps to its
-/// preset; any other custom id falls back to the saved preset. Meta-only
-/// fields are ignored.
-impl<'de> Deserialize<'de> for GeminiPipelineChoice {
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize)]
+pub enum TranscriptionModel {
+    /// AssemblyAI-STT-3.7 via direct AssemblyAI pre-recorded API.
+    #[default]
+    #[serde(rename = "assemblyai-stt-3-7")]
+    AssemblyAiStt37,
+    /// AssemblyAI Universal-3.6 Pro via OpenRouter STT endpoint.
+    #[serde(rename = "assemblyai-universal-3-6-pro")]
+    AssemblyAiUniversal36Pro,
+    /// OpenAI Whisper Large v3 via OpenRouter STT endpoint.
+    #[serde(rename = "openai-whisper-large-v3")]
+    OpenAiWhisperLargeV3,
+    /// OpenAI Whisper Large v3 Turbo via OpenRouter STT endpoint.
+    #[serde(rename = "openai-whisper-large-v3-turbo")]
+    OpenAiWhisperLargeV3Turbo,
+    /// OpenAI GPT-4o Transcribe via OpenRouter STT endpoint.
+    #[serde(rename = "openai-gpt-4o-transcribe")]
+    OpenAiGpt4oTranscribe,
+    /// OpenAI GPT-4o Mini Transcribe via OpenRouter STT endpoint.
+    #[serde(rename = "openai-gpt-4o-mini-transcribe")]
+    OpenAiGpt4oMiniTranscribe,
+}
+
+impl<'de> Deserialize<'de> for TranscriptionModel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "assemblyai-stt-3-7" => Ok(Self::AssemblyAiStt37),
+            "assemblyai-universal-3-6-pro" => Ok(Self::AssemblyAiUniversal36Pro),
+            "openai-whisper-large-v3" => Ok(Self::OpenAiWhisperLargeV3),
+            "openai-whisper-large-v3-turbo" => Ok(Self::OpenAiWhisperLargeV3Turbo),
+            "openai-gpt-4o-transcribe" => Ok(Self::OpenAiGpt4oTranscribe),
+            "openai-gpt-4o-mini-transcribe" => Ok(Self::OpenAiGpt4oMiniTranscribe),
+            // Legacy Gemini/Meta presets migrate safely without breaking old settings.json.
+            "flash-lite35"
+            | "flash36"
+            | "transcribe35"
+            | "gemini-3.5-transcribe"
+            | "transcribe-35"
+            | "muse-voice-transcribe-1.0"
+            | "muse-voice-transcribe" => Ok(Self::AssemblyAiUniversal36Pro),
+            _ => Err(serde::de::Error::unknown_variant(
+                &value,
+                &[
+                    "assemblyai-stt-3-7",
+                    "assemblyai-universal-3-6-pro",
+                    "openai-whisper-large-v3",
+                    "openai-whisper-large-v3-turbo",
+                    "openai-gpt-4o-transcribe",
+                    "openai-gpt-4o-mini-transcribe",
+                ],
+            )),
+        }
+    }
+}
+
+impl TranscriptionModel {
+    pub fn api_id(self) -> &'static str {
+        match self {
+            Self::AssemblyAiStt37 => crate::assemblyai::MODEL_STT_3_7,
+            Self::AssemblyAiUniversal36Pro => "assemblyai/universal-3-6-pro",
+            Self::OpenAiWhisperLargeV3 => "openai/whisper-large-v3",
+            Self::OpenAiWhisperLargeV3Turbo => "openai/whisper-large-v3-turbo",
+            Self::OpenAiGpt4oTranscribe => "openai/gpt-4o-transcribe",
+            Self::OpenAiGpt4oMiniTranscribe => "openai/gpt-4o-mini-transcribe",
+        }
+    }
+
+    pub fn is_openrouter_catalog(self) -> bool {
+        !matches!(self, Self::AssemblyAiStt37)
+    }
+}
+
+/// Validates a user-entered custom OpenRouter model ID (`vendor/model`).
+pub fn validate_custom_openrouter_model(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Informe um ID de modelo do OpenRouter (ex.: openai/whisper-large-v3).".into());
+    }
+    if trimmed.len() > 140 {
+        return Err("ID do modelo OpenRouter muito longo (máximo de 140 caracteres).".into());
+    }
+    let Some((vendor, name)) = trimmed.split_once('/') else {
+        return Err(
+            "Use o formato provedor/modelo do OpenRouter (ex.: openai/whisper-large-v3).".into(),
+        );
+    };
+    if vendor.trim().is_empty() || name.trim().is_empty() {
+        return Err("ID do modelo OpenRouter inválido.".into());
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.' | ':'))
+    {
+        return Err(
+            "ID do modelo OpenRouter contém caracteres inválidos (use apenas letras, números, '/', '-', '_', '.' ou ':')."
+                .into(),
+        );
+    }
+    Ok(trimmed.to_string())
+}
+
+/// The audio model route used for every dictation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct TranscriptionRoute {
+    pub model: TranscriptionModel,
+    pub provider: TranscriptionProvider,
+    #[serde(default)]
+    pub use_custom_model: bool,
+    #[serde(default)]
+    pub custom_model: String,
+}
+
+impl<'de> Deserialize<'de> for TranscriptionRoute {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -167,53 +258,78 @@ impl<'de> Deserialize<'de> for GeminiPipelineChoice {
         #[derive(Deserialize)]
         struct Stored {
             #[serde(default)]
-            model: GeminiModel,
+            model: TranscriptionModel,
             #[serde(default)]
-            provider: GeminiProvider,
+            provider: TranscriptionProvider,
             #[serde(default)]
             use_custom_model: bool,
             #[serde(default)]
             custom_model: String,
         }
         let stored = Stored::deserialize(deserializer)?;
-        let custom = stored.custom_model.trim().to_ascii_lowercase();
-        if stored.use_custom_model && custom.starts_with("assemblyai/universal-3") {
-            return Ok(Self {
-                model: GeminiModel::AssemblyAiUniversal36Pro,
-                provider: GeminiProvider::OpenRouter,
-            });
-        }
-        let mut choice = Self {
+        let custom_trimmed = stored.custom_model.trim().to_string();
+        let mut route = Self {
             model: stored.model,
             provider: stored.provider,
+            use_custom_model: stored.use_custom_model && !custom_trimmed.is_empty(),
+            custom_model: custom_trimmed,
         };
-        choice.normalize();
-        Ok(choice)
+        route.normalize();
+        Ok(route)
     }
 }
 
-impl GeminiPipelineChoice {
-    /// AssemblyAI exists only on OpenRouter.
+impl TranscriptionRoute {
+    /// Ensures provider, model, and custom ID flags are mutually consistent.
     pub fn normalize(&mut self) {
-        if self.model == GeminiModel::AssemblyAiUniversal36Pro {
-            self.provider = GeminiProvider::OpenRouter;
+        self.custom_model = self.custom_model.trim().to_string();
+        match self.provider {
+            TranscriptionProvider::AssemblyAi => {
+                self.model = TranscriptionModel::AssemblyAiStt37;
+                self.use_custom_model = false;
+            }
+            TranscriptionProvider::OpenRouter => {
+                if !self.model.is_openrouter_catalog() {
+                    self.model = TranscriptionModel::AssemblyAiUniversal36Pro;
+                }
+                if self.use_custom_model {
+                    // If a previously saved custom id is no longer valid, fall back cleanly.
+                    if validate_custom_openrouter_model(&self.custom_model).is_err() {
+                        self.use_custom_model = false;
+                    }
+                }
+            }
         }
     }
 
-    pub fn model_id(&self) -> &'static str {
-        match self.provider {
-            GeminiProvider::GoogleAiStudio => self.model.google_id(),
-            GeminiProvider::OpenRouter => self.model.openrouter_id(),
+    /// Validates user-submitted route changes (rejects invalid custom OpenRouter IDs).
+    pub fn validate(mut self) -> Result<Self, String> {
+        self.custom_model = self.custom_model.trim().to_string();
+        if self.provider == TranscriptionProvider::OpenRouter && self.use_custom_model {
+            self.custom_model = validate_custom_openrouter_model(&self.custom_model)?;
+        }
+        self.normalize();
+        Ok(self)
+    }
+
+    pub fn model_id(&self) -> &str {
+        if self.provider == TranscriptionProvider::OpenRouter
+            && self.use_custom_model
+            && !self.custom_model.trim().is_empty()
+        {
+            self.custom_model.trim()
+        } else {
+            self.model.api_id()
         }
     }
 }
 
-/// Persisted transcription route. Older settings files also carry routes for
-/// the removed modes; serde ignores them.
+/// Persisted transcription route container. Keeps `fast_accurate` wire name
+/// so existing `settings.json` files load without migration loss.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GeminiPipelineConfig {
+pub struct TranscriptionPipelineConfig {
     #[serde(default)]
-    pub fast_accurate: GeminiPipelineChoice,
+    pub fast_accurate: TranscriptionRoute,
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -275,67 +391,92 @@ mod tests {
 
     #[test]
     fn unknown_mode_json_fails_closed() {
-        let err = serde_json::from_str::<TranscriptionMode>(r#""teleport""#);
-        assert!(err.is_err());
+        assert!(serde_json::from_str::<TranscriptionMode>(r#""teleport""#).is_err());
     }
 
     #[test]
     fn unknown_content_type_fails_closed() {
-        let err = serde_json::from_str::<ContentType>(r#""podcast""#);
-        assert!(err.is_err());
+        assert!(serde_json::from_str::<ContentType>(r#""podcast""#).is_err());
     }
 
     #[test]
-    fn pipeline_choice_resolves_provider_model_ids() {
-        let preset = GeminiPipelineChoice::default();
-        assert_eq!(preset.model_id(), "gemini-3.5-flash-lite");
-        let routed = GeminiPipelineChoice {
-            model: GeminiModel::Transcribe35,
-            provider: GeminiProvider::OpenRouter,
+    fn default_route_uses_direct_assemblyai_stt_3_7() {
+        let preset = TranscriptionRoute::default();
+        assert_eq!(preset.provider, TranscriptionProvider::AssemblyAi);
+        assert_eq!(preset.model, TranscriptionModel::AssemblyAiStt37);
+        assert_eq!(preset.model_id(), "assemblyai-stt-3-7");
+        assert!(!preset.use_custom_model);
+    }
+
+    #[test]
+    fn openrouter_catalog_excludes_gemini_and_supports_universal_3_6_and_custom_ids() {
+        let universal = TranscriptionRoute {
+            provider: TranscriptionProvider::OpenRouter,
+            model: TranscriptionModel::AssemblyAiUniversal36Pro,
+            use_custom_model: false,
+            custom_model: String::new(),
         };
-        assert_eq!(routed.model_id(), "google/gemini-3.5-transcribe");
+        assert_eq!(universal.model_id(), "assemblyai/universal-3-6-pro");
+
+        let custom = TranscriptionRoute {
+            provider: TranscriptionProvider::OpenRouter,
+            model: TranscriptionModel::AssemblyAiUniversal36Pro,
+            use_custom_model: true,
+            custom_model: "  mistralai/voxtral-small-24b-2507  ".into(),
+        }
+        .validate()
+        .unwrap();
+        assert!(custom.use_custom_model);
+        assert_eq!(custom.model_id(), "mistralai/voxtral-small-24b-2507");
+
+        // Round-trip custom OpenRouter ID through JSON.
+        let json = serde_json::to_string(&custom).unwrap();
+        let back: TranscriptionRoute = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, custom);
+
+        // Reject malformed custom IDs.
+        assert!(TranscriptionRoute {
+            provider: TranscriptionProvider::OpenRouter,
+            model: TranscriptionModel::OpenAiWhisperLargeV3,
+            use_custom_model: true,
+            custom_model: "not-a-valid-id".into(),
+        }
+        .validate()
+        .is_err());
     }
 
     #[test]
-    fn old_settings_with_removed_routes_still_load() {
-        let json = r#"{
-            "ultra_fast_provider": "groq",
-            "ultra_fast_whisper": "large-v3",
-            "fast_accurate": {"model": "transcribe35", "provider": "open-router", "use_custom_model": false, "custom_model": "", "meta_languages": ["Portuguese"]},
-            "precise": {"model": "flash-lite35", "provider": "google-ai-studio"},
-            "ultra_precise": {"model": "flash36", "provider": "google-ai-studio"}
+    fn legacy_google_and_gemini_settings_migrate_cleanly() {
+        let google_json = r#"{"model": "transcribe35", "provider": "google-ai-studio"}"#;
+        let parsed: TranscriptionRoute = serde_json::from_str(google_json).unwrap();
+        assert_eq!(parsed.provider, TranscriptionProvider::AssemblyAi);
+        assert_eq!(parsed.model, TranscriptionModel::AssemblyAiStt37);
+
+        let openrouter_gemini_json = r#"{
+            "fast_accurate": {"model": "flash36", "provider": "open-router", "use_custom_model": false, "custom_model": ""}
         }"#;
-        let parsed: GeminiPipelineConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.fast_accurate.model, GeminiModel::Transcribe35);
-        assert_eq!(parsed.fast_accurate.provider, GeminiProvider::OpenRouter);
+        let parsed_cfg: TranscriptionPipelineConfig =
+            serde_json::from_str(openrouter_gemini_json).unwrap();
+        assert_eq!(
+            parsed_cfg.fast_accurate.provider,
+            TranscriptionProvider::OpenRouter
+        );
+        assert_eq!(
+            parsed_cfg.fast_accurate.model,
+            TranscriptionModel::AssemblyAiUniversal36Pro
+        );
+        assert_eq!(
+            parsed_cfg.fast_accurate.model_id(),
+            "assemblyai/universal-3-6-pro"
+        );
     }
 
     #[test]
-    fn assemblyai_custom_id_migrates_to_its_preset() {
-        let parsed: GeminiPipelineChoice = serde_json::from_str(
-            r#"{"model": "transcribe35", "provider": "open-router", "use_custom_model": true, "custom_model": "assemblyai/universal-3-6-pro"}"#,
-        )
-        .unwrap();
-        assert_eq!(parsed.model, GeminiModel::AssemblyAiUniversal36Pro);
-        assert_eq!(parsed.model_id(), "assemblyai/universal-3-6-pro");
-        let json = serde_json::to_string(&parsed).unwrap();
-        let back: GeminiPipelineChoice = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, parsed);
-
-        let other_custom: GeminiPipelineChoice = serde_json::from_str(
-            r#"{"model": "flash36", "provider": "google-ai-studio", "use_custom_model": true, "custom_model": "gemini-9-flash"}"#,
-        )
-        .unwrap();
-        assert_eq!(other_custom.model, GeminiModel::Flash36);
-        assert_eq!(other_custom.provider, GeminiProvider::GoogleAiStudio);
-    }
-
-    #[test]
-    fn removed_meta_route_migrates_to_openrouter_default_model() {
-        let parsed: GeminiPipelineChoice =
+    fn removed_meta_route_migrates_to_openrouter_universal_3_6() {
+        let parsed: TranscriptionRoute =
             serde_json::from_str(r#"{"model": "muse-voice-transcribe-1.0", "provider": "meta"}"#)
                 .unwrap();
-        assert_eq!(parsed.provider, GeminiProvider::OpenRouter);
-        assert_eq!(parsed.model, GeminiModel::FlashLite35);
+        assert_eq!(parsed.provider, TranscriptionProvider::OpenRouter);
+        assert_eq!(parsed.model, TranscriptionModel::AssemblyAiUniversal36Pro);
     }
 }

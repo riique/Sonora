@@ -291,12 +291,6 @@
           "markdownDescription": "Enables the get_shortcuts command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_smart_context_config command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-smart-context-config",
-          "markdownDescription": "Enables the get_smart_context_config command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_transcription_route command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-transcription-route",
@@ -427,12 +421,6 @@
           "type": "string",
           "const": "allow-set-shortcuts",
           "markdownDescription": "Enables the set_shortcuts command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the set_smart_context_config command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-smart-context-config",
-          "markdownDescription": "Enables the set_smart_context_config command without any pre-configured scope."
         },
         {
           "description": "Enables the set_transcription_route command without any pre-configured scope.",
@@ -603,12 +591,6 @@
           "markdownDescription": "Denies the get_shortcuts command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_smart_context_config command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-smart-context-config",
-          "markdownDescription": "Denies the get_smart_context_config command without any pre-configured scope."
-        },
-        {
           "description": "Denies the get_transcription_route command without any pre-configured scope.",
           "type": "string",
           "const": "deny-get-transcription-route",
@@ -739,12 +721,6 @@
           "type": "string",
           "const": "deny-set-shortcuts",
           "markdownDescription": "Denies the set_shortcuts command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_smart_context_config command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-smart-context-config",
-          "markdownDescription": "Denies the set_smart_context_config command without any pre-configured scope."
         },
         {
           "description": "Denies the set_transcription_route command without any pre-configured scope.",

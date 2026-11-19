@@ -147,9 +147,9 @@ pub fn transport_capabilities(provider: &str, endpoint: &str) -> TransportCapabi
             streaming: true,
             ..Default::default()
         },
-        ("google-ai-studio", "generateContent") => TransportCapabilities {
-            inline_base64: true,
-            resumable_file: true,
+        ("assemblyai", "v2/transcript") => TransportCapabilities {
+            raw_binary: true,
+            url: true,
             ..Default::default()
         },
         _ => TransportCapabilities::default(),
@@ -1133,6 +1133,9 @@ fn infer_provider(model: &str, stages: &[String]) -> String {
     let joined = stages.join(" ").to_ascii_lowercase();
     if joined.contains("openrouter") || model.contains('/') {
         "openrouter".into()
+    } else if joined.contains("assemblyai") || model.to_ascii_lowercase().starts_with("assemblyai-")
+    {
+        "assemblyai".into()
     } else if joined.contains("deepgram") || model.contains("nova") {
         "deepgram".into()
     } else if joined.contains("groq") || model.contains("whisper") {

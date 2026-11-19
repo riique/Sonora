@@ -1,14 +1,11 @@
-//! Product modes: UltraFast, FastAccurate, Precise, UltraPrecise.
+//! Transcription product pipeline orchestration (AssemblyAI direct, OpenRouter STT/multimodal,
+//! and automatic OpenRouter/Groq Whisper fallback on provider failure).
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use crate::gemini::{
-    adaptive_generate_timeout, fast_accurate_transcription_prompt, transcribe_audio,
-    GeminiAudioTransport, GeminiGenerateResult, GeminiOperation, GeminiPrompt, GeminiStageTiming,
-    TranscribeRequest, TRANSCRIBE_PROMPT_VERSION,
-};
 use crate::models::{AppState, HistoryEntry, SanitizerDebug};
-use crate::pipeline_contract::{GeminiProvider, TranscriptionMode};
+use crate::pipeline_contract::{TranscriptionMode, TranscriptionProvider};
 use crate::pipeline_run::{
     AttemptResultMetadata, AttemptStatus, AudioTransport, CostKind, CostRecord, PipelineError,
     PipelineErrorKind, PipelineRun, ProviderAttempt, StageKind, StageRecord, UsageRecord,
@@ -17,11 +14,26 @@ use crate::transcription::telemetry::{
     compute_realtime_factor, est_throughput, est_total_tokens, log_latency,
 };
 
-fn provider_history_label(provider: GeminiProvider) -> &'static str {
+fn provider_history_label(provider: TranscriptionProvider) -> &'static str {
     match provider {
-        GeminiProvider::GoogleAiStudio => "GoogleAIStudio",
-        GeminiProvider::OpenRouter => "OpenRouter",
+        TranscriptionProvider::AssemblyAi => "AssemblyAI",
+        TranscriptionProvider::OpenRouter => "OpenRouter",
     }
+}
+
+fn provider_slug(provider: TranscriptionProvider) -> &'static str {
+    match provider {
+        TranscriptionProvider::AssemblyAi => "assemblyai",
+        TranscriptionProvider::OpenRouter => "openrouter",
+    }
+}
+
+fn adaptive_request_timeout(duration_ms: Option<u64>, audio_bytes: usize) -> Duration {
+    let duration_secs = duration_ms
+        .map(|ms| ms.div_ceil(1000))
+        .unwrap_or_else(|| (audio_bytes as u64) / 32_000);
+    let secs = (duration_secs.saturating_mul(2).saturating_add(45)).clamp(45, 300);
+    Duration::from_secs(secs)
 }
 
 fn emit_fallback_progress(state: &AppState, provider: &str, fallback_provider: &str, reason: &str) {
@@ -48,30 +60,6 @@ fn emit_fallback_progress(state: &AppState, provider: &str, fallback_provider: &
             ..Default::default()
         },
     );
-}
-
-fn audio_transport_from_gemini(
-    value: Option<GeminiAudioTransport>,
-    usage: &UsageRecord,
-) -> AudioTransport {
-    if let Some(transport) = usage
-        .metadata
-        .get("transport")
-        .and_then(serde_json::Value::as_str)
-    {
-        return match transport {
-            "multipart" => AudioTransport::Multipart,
-            "raw_binary" => AudioTransport::RawBinary,
-            "resumable_file" => AudioTransport::ResumableFile,
-            "url" => AudioTransport::Url,
-            "websocket_stream" => AudioTransport::WebSocketStream,
-            _ => AudioTransport::InlineBase64,
-        };
-    }
-    match value {
-        Some(GeminiAudioTransport::FilesApi) => AudioTransport::ResumableFile,
-        Some(GeminiAudioTransport::Inline) | None => AudioTransport::InlineBase64,
-    }
 }
 
 fn completed_attempt(
@@ -134,33 +122,54 @@ fn failed_attempt(
         ..Default::default()
     }
 }
-pub struct OpenrouterAudioResultInput<'a> {
-    pub state: &'a AppState,
-    pub audio: &'a [u8],
-    pub ext: &'a str,
-    pub prompt: &'a GeminiPrompt,
-    pub model: &'a str,
-    pub api_key: &'a str,
-    pub duration_ms: Option<u64>,
-    pub operation: GeminiOperation,
-    pub prompt_version: &'a str,
+
+/// Concise system + user prompt used ONLY when a custom OpenRouter model ID
+/// resolves to the multimodal chat/completions endpoint.
+fn multimodal_transcription_prompts(glossary_block: &str) -> (String, String) {
+    let system = "Você é um motor de transcrição fiel de áudio. O áudio é a única fonte autoritativa.\n\
+Priorize português do Brasil e preserve palavras ou expressões em inglês (code-switching) sem traduzir.\n\
+Não invente, complete, resuma ou parafraseie palavras. Preserve termos técnicos, comandos e identificadores.\n\
+Se não houver fala humana inteligível, retorne saída vazia. Retorne somente o texto transcrito.".to_string();
+
+    let user = if glossary_block.trim().is_empty() {
+        "Transcreva fielmente o áudio anexado. Retorne somente o texto final.".to_string()
+    } else {
+        format!(
+            "Transcreva fielmente o áudio anexado. Use o glossário abaixo apenas como referência de grafia quando o áudio sustentar o termo:\n{}\n\nRetorne somente o texto final.",
+            glossary_block.trim()
+        )
+    };
+    (system, user)
 }
 
-async fn openrouter_audio_result(
-    input: OpenrouterAudioResultInput<'_>,
-) -> Result<GeminiGenerateResult, String> {
-    let OpenrouterAudioResultInput {
-        state,
-        audio,
-        ext,
-        prompt,
-        model,
-        api_key,
-        duration_ms,
-        operation,
-        prompt_version,
-    } = input;
-    let adaptive_timeout = adaptive_generate_timeout(duration_ms, audio.len());
+#[derive(Debug, Clone)]
+struct ProviderSpeechOutput {
+    text: String,
+    model: String,
+    transport: AudioTransport,
+    usage: UsageRecord,
+    generation_id: Option<String>,
+    language: Option<String>,
+    base64_ms: Option<u64>,
+    upload_ms: Option<u64>,
+    poll_ms: Option<u64>,
+    poll_count: Option<u32>,
+    generate_ms: Option<u64>,
+    request_ms: Option<u64>,
+    ttfb_ms: Option<u64>,
+    reported_total_tokens: Option<usize>,
+}
+
+async fn run_openrouter_audio(
+    state: &AppState,
+    audio: &[u8],
+    ext: &str,
+    glossary_block: &str,
+    model: &str,
+    api_key: &str,
+    duration_ms: Option<u64>,
+) -> Result<ProviderSpeechOutput, String> {
+    let adaptive_timeout = adaptive_request_timeout(duration_ms, audio.len());
     let route = crate::openrouter::detect_audio_route(model).await;
     log::info!(
         "modes: OpenRouter automatic audio route model={} endpoint={}",
@@ -169,11 +178,13 @@ async fn openrouter_audio_result(
     );
     let out = match route {
         crate::openrouter::OpenRouterAudioRoute::MultimodalLlm => {
+            let (system_instruction, user_prompt) =
+                multimodal_transcription_prompts(glossary_block);
             crate::openrouter::generate_with_audio(
                 audio,
                 ext,
-                &prompt.system_instruction,
-                &prompt.user_prompt,
+                &system_instruction,
+                &user_prompt,
                 model,
                 api_key,
                 adaptive_timeout,
@@ -181,26 +192,20 @@ async fn openrouter_audio_result(
             .await?
         }
         crate::openrouter::OpenRouterAudioRoute::SpeechToText => {
-            let assembly_options = if crate::smart_context::is_assemblyai(model) {
-                let prepared = state
-                    .smart_context_output
-                    .read()
-                    .clone()
-                    .unwrap_or_default();
-                let smart_config = state.smart_context_config.read().clone();
-                // Preserve recent speech context even when visual analysis takes too long.
-                let conversation_context =
-                    if smart_config.enabled && prepared.conversation_context.is_empty() {
-                        crate::smart_context::previous_dictations(smart_config.history_count)
-                    } else {
-                        prepared.conversation_context
-                    };
-                let vocab = state.vocabulary.read();
+            let vocab = state.vocabulary.read().clone();
+            let assembly_options = if crate::openrouter::is_assemblyai_model(model) {
                 Some(crate::openrouter::AssemblyAiOptions {
-                    prompt: crate::smart_context::prompt(prepared.prompt.as_deref()),
-                    keyterms_prompt: crate::smart_context::keyterms(&vocab, &prepared.keyterms),
-                    conversation_context,
+                    prompt: Some(crate::assemblyai::context_prompt().to_string()),
+                    keyterms_prompt: crate::assemblyai::build_keyterms(
+                        &vocab,
+                        crate::assemblyai::MAX_OPENROUTER_KEYTERMS,
+                    ),
                 })
+            } else {
+                None
+            };
+            let vocab_hint = if !crate::openrouter::is_assemblyai_model(model) {
+                crate::vocabulary::whisper_prompt_hint(&vocab)
             } else {
                 None
             };
@@ -209,51 +214,88 @@ async fn openrouter_audio_result(
                 ext,
                 model,
                 api_key,
-                std::time::Duration::from_secs(120).max(adaptive_timeout),
-                None,
+                Duration::from_secs(120).max(adaptive_timeout),
+                vocab_hint.as_deref(),
                 assembly_options.as_ref(),
             )
             .await?
         }
     };
-    let mut usage = UsageRecord {
-        audio_seconds: out.reported_audio_seconds,
-        input_tokens: out.reported_input_tokens.map(|value| value as u64),
-        output_tokens: out.reported_output_tokens.map(|value| value as u64),
-        total_tokens: out.reported_total_tokens.map(|value| value as u64),
-        bytes_sent: Some(out.bytes_sent),
-        cost: out
-            .reported_cost_usd
-            .map_or_else(CostRecord::default, |amount| CostRecord {
-                kind: CostKind::Actual,
-                amount_usd: Some(amount),
-                source: Some("openrouter_response_usage".into()),
-            }),
-        ..Default::default()
-    };
-    usage
-        .metadata
-        .insert("transport".into(), out.transport.as_str().into());
-    usage
-        .metadata
-        .insert("request_ms".into(), out.request_ms.into());
-    if let Some(ttfb_ms) = out.ttfb_ms {
-        usage.metadata.insert("ttfb_ms".into(), ttfb_ms.into());
-    }
-    Ok(GeminiGenerateResult {
-        operation,
+    let usage = openrouter_usage(&out);
+    Ok(ProviderSpeechOutput {
         text: out.text,
         model: model.to_string(),
-        prompt_version: prompt_version.to_string(),
-        latency_ms: out.base64_ms + out.request_ms,
-        remote_file_name: None,
-        transport: Some(GeminiAudioTransport::Inline),
-        timing: GeminiStageTiming {
-            base64_ms: Some(out.base64_ms),
-            generate_ms: Some(out.request_ms),
-            ..Default::default()
-        },
+        transport: out.transport,
         usage,
+        generation_id: out.generation_id,
+        language: None,
+        base64_ms: (out.base64_ms > 0).then_some(out.base64_ms),
+        upload_ms: None,
+        poll_ms: None,
+        poll_count: None,
+        generate_ms: Some(out.request_ms),
+        request_ms: Some(out.request_ms),
+        ttfb_ms: out.ttfb_ms,
+        reported_total_tokens: out.reported_total_tokens,
+    })
+}
+
+async fn run_direct_assemblyai(
+    state: &AppState,
+    audio: &[u8],
+    model: &str,
+    api_key: &str,
+    duration_ms: Option<u64>,
+) -> Result<ProviderSpeechOutput, String> {
+    let vocab = state.vocabulary.read().clone();
+    let keyterms_prompt =
+        crate::assemblyai::build_keyterms(&vocab, crate::assemblyai::MAX_DIRECT_KEYTERMS);
+    let out = crate::assemblyai::transcribe_audio(crate::assemblyai::AssemblyAiTranscribeRequest {
+        audio,
+        api_key,
+        model,
+        duration_ms,
+        keyterms_prompt,
+        prompt: Some(crate::assemblyai::context_prompt()),
+    })
+    .await?;
+
+    let mut metadata = std::collections::BTreeMap::new();
+    metadata.insert(
+        "transport".into(),
+        AudioTransport::RawBinary.as_str().into(),
+    );
+    metadata.insert("upload_ms".into(), out.upload_ms.into());
+    metadata.insert("submit_ms".into(), out.submit_ms.into());
+    metadata.insert("poll_ms".into(), out.poll_ms.into());
+    metadata.insert("poll_count".into(), out.poll_count.into());
+    if let Some(confidence) = out.confidence {
+        metadata.insert("confidence".into(), confidence.into());
+    }
+
+    let usage = UsageRecord {
+        audio_seconds: out.audio_duration,
+        bytes_sent: Some(out.bytes_sent),
+        cost: CostRecord::default(),
+        metadata,
+        ..Default::default()
+    };
+
+    Ok(ProviderSpeechOutput {
+        text: out.text,
+        model: out.model,
+        transport: AudioTransport::RawBinary,
+        usage,
+        generation_id: Some(out.transcript_id),
+        language: out.language_code,
+        base64_ms: None,
+        upload_ms: Some(out.upload_ms),
+        poll_ms: Some(out.poll_ms),
+        poll_count: Some(out.poll_count),
+        generate_ms: Some(out.total_ms),
+        request_ms: Some(out.total_ms),
+        ttfb_ms: None,
+        reported_total_tokens: None,
     })
 }
 
@@ -316,7 +358,7 @@ fn pipeline_debug_snapshot(result: &PipelineRun) -> SanitizerDebug {
         user_parts.push(format!("[SANITIZER]\n{}", s));
     }
     if let Some(g) = result.gemini_text.as_ref().filter(|t| !t.is_empty()) {
-        user_parts.push(format!("[GEMINI]\n{}", g));
+        user_parts.push(format!("[PRIMARY]\n{}", g));
     }
     if user_parts.is_empty() {
         user_parts.push(format!("[FINAL]\n{}", result.final_text));
@@ -362,37 +404,24 @@ fn pipeline_debug_snapshot(result: &PipelineRun) -> SanitizerDebug {
     }
 }
 
-fn apply_timing_from_gemini(result: &mut PipelineRun, g: &crate::gemini::GeminiGenerateResult) {
-    result.usage.merge(&g.usage);
-    if let Some(transport) = g
-        .usage
-        .metadata
-        .get("transport")
-        .and_then(serde_json::Value::as_str)
-    {
-        result.gemini_transport = Some(transport.to_string());
-    } else if let Some(t) = g.transport {
-        result.gemini_transport = Some(t.as_str().to_string());
-    }
-    result.base64_ms = g.timing.base64_ms.or(result.base64_ms);
-    result.files_upload_ms = g.timing.files_upload_ms.or(result.files_upload_ms);
-    result.files_poll_ms = g.timing.files_poll_ms.or(result.files_poll_ms);
-    result.files_poll_count = g.timing.files_poll_count.or(result.files_poll_count);
-    result.gemini_generate_ms = g.timing.generate_ms.or(result.gemini_generate_ms);
-    result.gemini_delete_ms = g.timing.delete_ms.or(result.gemini_delete_ms);
-    result.gemini_ms = g.timing.generate_ms.or(Some(g.latency_ms));
-    result.timings.request_ms = g
-        .usage
-        .metadata
-        .get("request_ms")
-        .and_then(serde_json::Value::as_u64);
-    result.timings.ttfb_ms = g
-        .usage
-        .metadata
-        .get("ttfb_ms")
-        .and_then(serde_json::Value::as_u64);
-    if let Some(u) = g.timing.files_upload_ms {
-        let poll = g.timing.files_poll_ms.unwrap_or(0);
+fn apply_timing_from_provider(result: &mut PipelineRun, out: &ProviderSpeechOutput) {
+    result.usage.merge(&out.usage);
+    result.gemini_transport = Some(out.transport.as_str().to_string());
+    result.base64_ms = out.base64_ms.or(result.base64_ms);
+    result.files_upload_ms = out.upload_ms.or(result.files_upload_ms);
+    result.files_poll_ms = out.poll_ms.or(result.files_poll_ms);
+    result.files_poll_count = out.poll_count.or(result.files_poll_count);
+    result.gemini_generate_ms = out.generate_ms.or(result.gemini_generate_ms);
+    result.gemini_ms = out.request_ms.or(result.gemini_ms);
+    result.timings.request_ms = out.request_ms;
+    result.timings.ttfb_ms = out.ttfb_ms;
+    result.openrouter_generation_id = out
+        .generation_id
+        .clone()
+        .or_else(|| result.openrouter_generation_id.clone());
+    result.reported_total_tokens = out.reported_total_tokens.or(result.reported_total_tokens);
+    if let Some(u) = out.upload_ms {
+        let poll = out.poll_ms.unwrap_or(0);
         result.upload_ms = Some(u + poll);
     }
 }
@@ -436,21 +465,29 @@ pub(crate) fn record_assist_call(run: &mut PipelineRun, id: &str, out: &crate::a
     run.journal.push(stage);
 }
 
-/// FastAccurate: Gemini (inline or Files) + glossary + strict literals.
-/// Runs the Whisper backup after the audio model failed, recording the attempt.
-/// Returns `(text, model)` or the Whisper error.
+struct WhisperBackupContext<'a> {
+    primary_label: &'a str,
+    audio: &'a [u8],
+    ext: &'a str,
+    reason: &'a str,
+}
+
+/// Runs the Whisper backup after the primary audio provider failed, recording the attempt.
 async fn whisper_backup(
     state: &Arc<AppState>,
-    audio: &[u8],
-    ext: &str,
-    reason: &str,
+    ctx: WhisperBackupContext<'_>,
     attempts: &mut Vec<ProviderAttempt>,
     result_meta: &mut PipelineRun,
     stages: &mut Vec<String>,
 ) -> Result<(String, String), String> {
-    emit_fallback_progress(state, "Gemini", "OpenRouter/Groq Whisper", reason);
+    emit_fallback_progress(
+        state,
+        ctx.primary_label,
+        "OpenRouter/Groq Whisper",
+        ctx.reason,
+    );
     let started = std::time::Instant::now();
-    match run_openrouter_whisper_fallback(state, audio, ext).await {
+    match run_openrouter_whisper_fallback(state, ctx.audio, ctx.ext).await {
         Ok(outcome) => {
             let whisper_ms = started.elapsed().as_millis() as u64;
             let mut attempt = completed_attempt(
@@ -483,26 +520,40 @@ async fn whisper_backup(
     }
 }
 
+enum PrimaryOutcome {
+    Transcribed(String, String),
+    /// The recognizer succeeded (HTTP 200) and explicitly confirmed there was
+    /// no intelligible speech. Must NOT fall back to Whisper (which hallucinates
+    /// text on silence).
+    NoSpeech,
+    Failed(String, String),
+}
+
 pub async fn run_fast_accurate(
     state: &Arc<AppState>,
     audio: Vec<u8>,
     ext: &str,
-    file_name: &str,
+    _file_name: &str,
     duration_ms: Option<u64>,
 ) -> Result<PipelineRun, String> {
     let t0 = std::time::Instant::now();
     let audio_len = audio.len();
-    let choice = state.gemini_pipelines.read().fast_accurate.clone();
+    let choice = state.transcription_pipelines.read().fast_accurate.clone();
     let model_id = choice.model_id().to_string();
     let api_key = match choice.provider {
-        GeminiProvider::GoogleAiStudio => state.next_google_key(),
-        GeminiProvider::OpenRouter => state.next_openrouter_key(),
+        TranscriptionProvider::AssemblyAi => state.next_assemblyai_key(),
+        TranscriptionProvider::OpenRouter => state.next_openrouter_key(),
     };
     let glossary_block = {
         let vocab = state.vocabulary.read().clone();
         crate::vocabulary::format_glossary_for_prompt(&vocab)
     };
     let provider_label = provider_history_label(choice.provider);
+    let provider_id = provider_slug(choice.provider);
+    let default_transport = match choice.provider {
+        TranscriptionProvider::AssemblyAi => AudioTransport::RawBinary,
+        TranscriptionProvider::OpenRouter => AudioTransport::Multipart,
+    };
     log::info!(
         "modes: FastAccurate → {} model={}",
         provider_label,
@@ -511,128 +562,104 @@ pub async fn run_fast_accurate(
 
     let mut stages = Vec::new();
     let mut whisper_text = None;
-    let mut gemini_text = None;
+    let mut primary_text = None;
     let mut result_meta = PipelineRun::default();
     let mut attempts = Vec::new();
-    let gemini_provider = match choice.provider {
-        GeminiProvider::GoogleAiStudio => "google-ai-studio",
-        GeminiProvider::OpenRouter => "openrouter",
-    };
 
-    // Ok((text, model)) from the audio model, or Err((fallback_reason, message)).
-    let primary: Result<(String, String), (String, String)> = match api_key {
+    let primary = match api_key {
         None => {
-            stages.push("gemini_skipped_no_key".into());
+            stages.push("primary_skipped_no_key".into());
             attempts.push(failed_attempt(
                 "attempt-1",
-                gemini_provider,
+                provider_id,
                 &model_id,
-                AudioTransport::InlineBase64,
+                default_transport,
                 0,
                 "missing_key",
                 "Chave do provedor não configurada",
             ));
-            Err((
-                "gemini_missing_api_key".into(),
-                "Chave do provedor selecionado ausente".into(),
-            ))
+            PrimaryOutcome::Failed(
+                "provider_missing_api_key".into(),
+                format!("Chave da API de {provider_label} ausente"),
+            )
         }
         Some(key) => {
             stages.push(format!(
                 "model_api:{}",
-                if choice.provider == GeminiProvider::OpenRouter {
-                    "automatic"
-                } else if crate::gemini::is_transcribe_model(&model_id) {
-                    "google-interactions"
-                } else {
-                    "google-generate-content"
+                match choice.provider {
+                    TranscriptionProvider::AssemblyAi => "assemblyai-prerecorded",
+                    TranscriptionProvider::OpenRouter => "openrouter-automatic",
                 }
             ));
-            stages.push("gemini_transcribe".into());
-            let custom_vocabulary: Vec<String> = {
-                let vocab = state.vocabulary.read();
-                vocab
-                    .iter()
-                    .filter(|t| t.enabled)
-                    .flat_map(|t| std::iter::once(t.canonical.clone()).chain(t.aliases.clone()))
-                    .take(1000)
-                    .collect()
-            };
+            stages.push("primary_transcribe".into());
             let provider_started = std::time::Instant::now();
-            let generated = if choice.provider == GeminiProvider::OpenRouter {
-                let prompt = fast_accurate_transcription_prompt(&glossary_block);
-                openrouter_audio_result(OpenrouterAudioResultInput {
-                    state,
-                    audio: &audio,
-                    ext,
-                    prompt: &prompt,
-                    model: &model_id,
-                    api_key: &key,
-                    duration_ms,
-                    operation: GeminiOperation::Transcribe,
-                    prompt_version: TRANSCRIBE_PROMPT_VERSION,
-                })
-                .await
-            } else {
-                transcribe_audio(TranscribeRequest {
-                    audio_bytes: audio.clone(),
-                    ext: ext.to_string(),
-                    api_key: key.clone(),
-                    model: model_id.clone(),
-                    display_name: file_name.to_string(),
-                    duration_ms,
-                    glossary_block,
-                    custom_vocabulary,
-                })
-                .await
+            let generated = match choice.provider {
+                TranscriptionProvider::AssemblyAi => {
+                    run_direct_assemblyai(state, &audio, &model_id, &key, duration_ms).await
+                }
+                TranscriptionProvider::OpenRouter => {
+                    run_openrouter_audio(
+                        state,
+                        &audio,
+                        ext,
+                        &glossary_block,
+                        &model_id,
+                        &key,
+                        duration_ms,
+                    )
+                    .await
+                }
             };
             let provider_ms = provider_started.elapsed().as_millis() as u64;
             match generated {
-                Ok(r) if !r.text.trim().is_empty() => {
-                    apply_timing_from_gemini(&mut result_meta, &r);
+                Ok(out) if !out.text.trim().is_empty() => {
+                    apply_timing_from_provider(&mut result_meta, &out);
                     let mut attempt = completed_attempt(
                         "attempt-1",
-                        gemini_provider,
-                        &r.model,
-                        audio_transport_from_gemini(r.transport, &r.usage),
+                        provider_id,
+                        &out.model,
+                        out.transport,
                         provider_ms,
-                        r.text.len(),
+                        out.text.len(),
                         audio_len,
                     );
-                    attempt.usage = r.usage.clone();
+                    attempt.usage = out.usage.clone();
+                    attempt.result.generation_id = out.generation_id.clone();
+                    attempt.result.language = out.language.clone();
                     attempts.push(attempt);
-                    if let Some(t) = r.transport {
-                        stages.push(format!("transport:{}", t.as_str()));
-                    }
-                    gemini_text = Some(r.text.clone());
-                    Ok((r.text, r.model))
+                    stages.push(format!("transport:{}", out.transport.as_str()));
+                    primary_text = Some(out.text.clone());
+                    PrimaryOutcome::Transcribed(out.text, out.model)
                 }
-                Ok(r) => {
-                    attempts.push(failed_attempt(
+                Ok(out) => {
+                    apply_timing_from_provider(&mut result_meta, &out);
+                    let mut attempt = completed_attempt(
                         "attempt-1",
-                        gemini_provider,
-                        &r.model,
-                        audio_transport_from_gemini(r.transport, &r.usage),
+                        provider_id,
+                        &out.model,
+                        out.transport,
                         provider_ms,
-                        "empty_response",
-                        "O provider retornou texto vazio",
-                    ));
-                    Err((
-                        "gemini_empty".into(),
-                        "Resposta vazia do provedor selecionado".into(),
-                    ))
+                        0,
+                        audio_len,
+                    );
+                    attempt.usage = out.usage.clone();
+                    attempt.result.generation_id = out.generation_id.clone();
+                    attempt.result.language = out.language.clone();
+                    attempts.push(attempt);
+                    stages.push("no_intelligible_speech".into());
+                    PrimaryOutcome::NoSpeech
                 }
-                Err(e) => {
+                Err(error) => {
                     attempts.push(failed_attempt(
                         "attempt-1",
-                        gemini_provider,
+                        provider_id,
                         &model_id,
-                        AudioTransport::InlineBase64,
+                        default_transport,
                         provider_ms,
                         "provider_error",
-                        &e,
+                        &error,
                     ));
-                    Err((format!("gemini_error: {e}"), e))
+                    PrimaryOutcome::Failed(format!("provider_error: {error}"), error)
                 }
             }
         }
@@ -642,16 +669,31 @@ pub async fn run_fast_accurate(
     let mut fallback_reason = None;
     let mut label = format!("FastAccurate/{provider_label}");
     let (final_text, model) = match primary {
-        Ok(done) => done,
-        Err((reason, message)) => {
+        PrimaryOutcome::Transcribed(text, model) => (text, model),
+        PrimaryOutcome::NoSpeech => {
+            let message = "Nenhuma fala inteligível detectada na gravação.".to_string();
+            remember_failed_attempts(
+                state,
+                TranscriptionMode::FastAccurate,
+                attempts,
+                &message,
+                false,
+                None,
+            );
+            return Err(message);
+        }
+        PrimaryOutcome::Failed(reason, message) => {
             used_fallback = true;
             fallback_reason = Some(reason);
             label = "FastAccurate/WhisperFallback/OpenRouter-Groq".into();
             match whisper_backup(
                 state,
-                &audio,
-                ext,
-                &message,
+                WhisperBackupContext {
+                    primary_label: provider_label,
+                    audio: &audio,
+                    ext,
+                    reason: &message,
+                },
                 &mut attempts,
                 &mut result_meta,
                 &mut stages,
@@ -693,7 +735,7 @@ pub async fn run_fast_accurate(
         used_fallback,
         fallback_reason,
         whisper_text,
-        gemini_text,
+        gemini_text: primary_text,
         transcription_latency_ms: ms,
         history_engine_label: label,
         total_pipeline_ms: Some(ms),
@@ -706,6 +748,8 @@ pub async fn run_fast_accurate(
         files_poll_count: result_meta.files_poll_count,
         gemini_generate_ms: result_meta.gemini_generate_ms,
         gemini_transport: result_meta.gemini_transport,
+        openrouter_generation_id: result_meta.openrouter_generation_id,
+        reported_total_tokens: result_meta.reported_total_tokens,
         attempts,
         ..Default::default()
     })
@@ -788,7 +832,6 @@ pub fn mode_result_to_history(
         latency_ms: result.transcription_latency_ms,
         throughput: transcription_throughput.unwrap_or(0.0),
         transcription_latency_ms: Some(result.transcription_latency_ms),
-        // Real sanitizer time when measured; None when mode has no sanitizer.
         sanitizer_latency_ms: san_ms,
         transcription_throughput,
         sanitizer_throughput: san_ms.and_then(|ms| {
@@ -949,12 +992,15 @@ fn remember_failed_attempts(
     fallback_reason: Option<String>,
 ) {
     if attempts.is_empty() {
-        let (provider, model, transport) =
-            ("gemini", "configured-model", AudioTransport::InlineBase64);
+        let choice = state.transcription_pipelines.read().fast_accurate.clone();
+        let (provider, transport) = match choice.provider {
+            TranscriptionProvider::AssemblyAi => ("assemblyai", AudioTransport::RawBinary),
+            TranscriptionProvider::OpenRouter => ("openrouter", AudioTransport::Multipart),
+        };
         attempts.push(failed_attempt(
             "attempt-1",
             provider,
-            model,
+            choice.model_id(),
             transport,
             0,
             "pipeline_error",
@@ -979,9 +1025,6 @@ pub(crate) fn finalize_product_result(
     state: &Arc<AppState>,
     mut result: PipelineRun,
 ) -> PipelineRun {
-    // Output policy is part of the recording session and must be attached before
-    // any output transformation. Otherwise a profile-selected Literal/Aggressive
-    // policy would be applied only after Smart formatting had already run.
     if let Some(session) = state.recording_session.lock().clone() {
         result.session_id = session.id.clone();
         result.started_at_ms = session.started_at_ms;
@@ -1051,7 +1094,7 @@ pub(crate) fn finalize_product_result(
         );
         result.add_stage(fallback);
     }
-    // Global strict pass (may double-apply with in-mode; safe / idempotent).
+
     let vocab = state.vocabulary.read().clone();
     let ts = std::time::Instant::now();
     let (text, hits) = crate::vocabulary::apply_strict_literals(&result.final_text, &vocab);
@@ -1076,9 +1119,6 @@ pub(crate) fn finalize_product_result(
         .or_else(|| result.gemini_text.clone())
         .unwrap_or_else(|| result.final_text.clone());
     let refined_candidate = crate::transcription::remove_known_transcription_artifacts(&text);
-    // Strict vocabulary is a deliberate user rewrite: guard against the raw text with
-    // the same literals applied, or a term like "NextJS" → "Next.js" would make the
-    // guard discard the whole refinement.
     let (guard_source, _) = crate::vocabulary::apply_strict_literals(&raw_text, &vocab);
     let refinement_guard =
         crate::transformations::enforce_protected_spans(&guard_source, &refined_candidate);
@@ -1115,8 +1155,6 @@ pub(crate) fn finalize_product_result(
     result.warnings.extend(formatted.warnings);
 
     let code_guard_started = std::time::Instant::now();
-    // Formatting must not damage spans of its own input. Guarding against the raw
-    // recognizer text here would throw away refinement, vocabulary and backtrack.
     let guarded =
         crate::transformations::enforce_protected_spans(&backtracked.text, &formatted.text);
     let code_guard_ms = code_guard_started.elapsed().as_millis() as u64;
@@ -1166,11 +1204,8 @@ fn synthesize_provider_attempts(state: &AppState, result: &mut PipelineRun) {
     if result.mode != TranscriptionMode::FastAccurate {
         return;
     }
-    let choice = state.gemini_pipelines.read().fast_accurate.clone();
-    let provider = match choice.provider {
-        GeminiProvider::GoogleAiStudio => "google-ai-studio",
-        GeminiProvider::OpenRouter => "openrouter",
-    };
+    let choice = state.transcription_pipelines.read().fast_accurate.clone();
+    let provider = provider_slug(choice.provider);
     let model = choice.model_id().to_string();
     let transport = match result.gemini_transport.as_deref() {
         Some("multipart") => AudioTransport::Multipart,
@@ -1186,7 +1221,7 @@ fn synthesize_provider_attempts(state: &AppState, result: &mut PipelineRun) {
         .filter(|text| !text.is_empty())
     {
         let mut attempt = completed_attempt(
-            "attempt-gemini",
+            "attempt-primary",
             provider,
             &model,
             transport,
@@ -1206,7 +1241,7 @@ fn synthesize_provider_attempts(state: &AppState, result: &mut PipelineRun) {
             .clone()
             .unwrap_or_else(|| "provider unavailable".into());
         result.attempts.push(failed_attempt(
-            "attempt-gemini",
+            "attempt-primary",
             provider,
             &model,
             transport,
@@ -1280,21 +1315,21 @@ mod tests {
         let r = PipelineRun {
             final_text: "x".into(),
             mode: TranscriptionMode::UltraPrecise,
-            model: "gemini-3.5-flash-lite".into(),
+            model: "assemblyai-stt-3-7".into(),
             stages: vec!["sanitizer:120ms".into()],
             transcription_latency_ms: 500,
-            history_engine_label: "UltraPrecise".into(),
+            history_engine_label: "FastAccurate/AssemblyAI".into(),
             sanitizer_ms: Some(120),
             whisper_ms: Some(80),
             gemini_generate_ms: Some(200),
-            gemini_transport: Some("inline".into()),
+            gemini_transport: Some("raw_binary".into()),
             total_pipeline_ms: Some(500),
             ..Default::default()
         };
         let h = mode_result_to_history("2".into(), "d".into(), None, 1000, "mic", &r);
         assert_eq!(h.sanitizer_latency_ms, Some(120));
         assert_eq!(h.sanitizer_ms, Some(120));
-        assert_eq!(h.gemini_transport.as_deref(), Some("inline"));
+        assert_eq!(h.gemini_transport.as_deref(), Some("raw_binary"));
         assert_eq!(h.gemini_generate_ms, Some(200));
     }
 
@@ -1312,6 +1347,7 @@ mod tests {
         assert_eq!(h.is_error, Some(true));
         assert!(h.sanitizer_latency_ms.is_none());
     }
+
     #[test]
     fn delivery_failure_preserves_text_and_reports_actionable_error() {
         let mut run = PipelineRun::success(

@@ -1,5 +1,7 @@
-//! OpenRouter audio client. Chat audio uses Base64 `input_audio`; the dedicated
-//! OpenAI-compatible STT endpoint uses multipart/form-data.
+//! OpenRouter audio & text client.
+//!
+//! - Dedicated STT models (`/api/v1/audio/transcriptions`) use multipart/form-data.
+//! - Multimodal audio LLMs (`/api/v1/chat/completions`) use Base64 `input_audio`.
 
 use crate::pipeline_run::AudioTransport;
 use base64::{engine::general_purpose, Engine as _};
@@ -184,12 +186,19 @@ pub struct OpenRouterTextResult {
     pub bytes_sent: u64,
 }
 
+/// Returns true for AssemblyAI STT models routed via OpenRouter.
+pub fn is_assemblyai_model(model: &str) -> bool {
+    let id = model.trim().to_ascii_lowercase();
+    id.starts_with("assemblyai/")
+}
+
 fn model_looks_dedicated_stt(model: &str) -> bool {
-    let id = model.to_ascii_lowercase();
+    let id = model.trim().to_ascii_lowercase();
     id.contains("whisper")
-        || id.contains("chirp")
         || id.contains("transcribe")
-        || id.starts_with("assemblyai/universal-3")
+        || id.contains("chirp")
+        || id.starts_with("assemblyai/")
+        || id.starts_with("deepgram/")
 }
 
 fn whisper_provider_preferences(
@@ -234,15 +243,11 @@ async fn fetch_stt_model_ids() -> Result<HashSet<String>, String> {
 }
 
 /// Automatically selects the OpenRouter audio endpoint. Dedicated STT models
-/// are discovered from the provider's official model catalog and common STT
-/// ids are recognized locally so Chirp/Whisper do not need a discovery round
-/// trip. A catalog outage falls back to the multimodal endpoint.
+/// are recognized locally or discovered from OpenRouter's official STT catalog
+/// so custom OpenRouter IDs route to the right endpoint automatically.
 pub async fn detect_audio_route(model: &str) -> OpenRouterAudioRoute {
     if model_looks_dedicated_stt(model) {
         return OpenRouterAudioRoute::SpeechToText;
-    }
-    if model.to_ascii_lowercase().starts_with("google/gemini-") {
-        return OpenRouterAudioRoute::MultimodalLlm;
     }
     match STT_MODEL_IDS.get_or_try_init(fetch_stt_model_ids).await {
         Ok(ids) if ids.contains(model) => OpenRouterAudioRoute::SpeechToText,
@@ -268,10 +273,10 @@ pub async fn generate_with_audio(
     timeout: Duration,
 ) -> Result<OpenRouterGenerateResult, String> {
     if audio.is_empty() {
-        return Err("OpenRouter Gemini: o áudio está vazio.".into());
+        return Err("OpenRouter: o áudio está vazio.".into());
     }
     if api_key.trim().is_empty() {
-        return Err("Configure uma chave do OpenRouter em Provedores e APIs.".into());
+        return Err("Configure uma chave do OpenRouter em Ajustes → Transcrição.".into());
     }
     let format = audio_format(ext)?;
     let encode_started = Instant::now();
@@ -309,7 +314,7 @@ pub async fn generate_with_audio(
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("OpenRouter Gemini: falha de rede: {e}"))?;
+            .map_err(|e| format!("OpenRouter: falha de rede: {e}"))?;
         let ttfb_ms = started.elapsed().as_millis() as u64;
         let status = response.status();
         let generation_id = response
@@ -320,27 +325,22 @@ pub async fn generate_with_audio(
         let response_body = response
             .text()
             .await
-            .map_err(|e| format!("OpenRouter Gemini: falha ao ler a resposta: {e}"))?;
+            .map_err(|e| format!("OpenRouter: falha ao ler a resposta: {e}"))?;
         Ok::<_, String>((status, generation_id, response_body, ttfb_ms))
     };
     let (status, generation_id, response_body, ttfb_ms) = tokio::time::timeout(timeout, exchange)
         .await
-        .map_err(|_| {
-            format!(
-                "OpenRouter Gemini: timeout após {} segundos.",
-                timeout.as_secs()
-            )
-        })??;
+        .map_err(|_| format!("OpenRouter: timeout após {} segundos.", timeout.as_secs()))??;
     let request_ms = started.elapsed().as_millis() as u64;
     if !status.is_success() {
         return Err(format!(
-            "OpenRouter Gemini retornou status {}: {}",
+            "OpenRouter retornou status {}: {}",
             status.as_u16(),
             truncate_error(&response_body, 800)
         ));
     }
     let parsed: ChatResponse = serde_json::from_str(&response_body)
-        .map_err(|e| format!("OpenRouter Gemini: resposta inválida: {e}"))?;
+        .map_err(|e| format!("OpenRouter: resposta inválida: {e}"))?;
     let usage = parsed.usage.unwrap_or_default();
     let text = parsed
         .choices
@@ -348,9 +348,6 @@ pub async fn generate_with_audio(
         .next()
         .map(|choice| choice.message.content.trim().to_string())
         .unwrap_or_default();
-    if text.is_empty() {
-        return Err("OpenRouter Gemini não retornou texto.".into());
-    }
     Ok(OpenRouterGenerateResult {
         text,
         base64_ms,
@@ -367,9 +364,7 @@ pub async fn generate_with_audio(
     })
 }
 
-/// Text-only OpenRouter call used exclusively by explicitly requested,
-/// opt-in derived features such as the Voice Profile. The caller supplies
-/// aggregate data; this helper never reads history or audio.
+/// Text-only OpenRouter call used by Voice Command and opt-in Voice Profile.
 pub async fn generate_text(
     system_instruction: &str,
     user_prompt: &str,
@@ -378,7 +373,7 @@ pub async fn generate_text(
     timeout: Duration,
 ) -> Result<OpenRouterTextResult, String> {
     if api_key.trim().is_empty() {
-        return Err("Configure uma chave do OpenRouter em Provedores e APIs.".into());
+        return Err("Configure uma chave do OpenRouter em Ajustes → Transcrição.".into());
     }
     let body = ChatRequest {
         model,
@@ -456,16 +451,15 @@ pub async fn generate_text(
     })
 }
 
-/// Sends audio to OpenRouter's dedicated speech-to-text endpoint. Unlike
-/// [`generate_with_audio`], this contract accepts no prompt and must only be
-/// used with models whose output modality is `transcription`.
+/// Concise AssemblyAI options forwarded via OpenRouter provider passthrough.
+/// Intentionally omits `conversation_context` (unrelated past dictations) to
+/// avoid bias and hallucinations.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct AssemblyAiOptions {
-    pub prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub keyterms_prompt: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub conversation_context: Vec<String>,
 }
 
 pub async fn transcribe_audio(
@@ -493,7 +487,7 @@ pub async fn transcribe_audio_with_assembly(
         return Err("OpenRouter STT: o áudio está vazio.".into());
     }
     if api_key.trim().is_empty() {
-        return Err("Configure uma chave do OpenRouter em Provedores e APIs.".into());
+        return Err("Configure uma chave do OpenRouter em Ajustes → Transcrição.".into());
     }
     let capabilities =
         crate::pipeline_run::transport_capabilities("openrouter", "audio/transcriptions");
@@ -512,25 +506,31 @@ pub async fn transcribe_audio_with_assembly(
         "flac" => "audio/flac",
         "m4a" => "audio/mp4",
         "ogg" => "audio/ogg",
+        "webm" => "audio/webm",
+        "aac" => "audio/aac",
         _ => "application/octet-stream",
     };
     let part = multipart::Part::bytes(audio.to_vec())
         .file_name(filename)
         .mime_str(mime)
         .map_err(|error| format!("OpenRouter STT: MIME inválido: {error}"))?;
-    let is_assembly = crate::smart_context::is_assemblyai(model);
+    let is_assembly = is_assemblyai_model(model);
+    let is_whisper = model.to_ascii_lowercase().contains("whisper");
     let mut form = multipart::Form::new()
         .text("model", model.to_string())
         .part("file", part);
-    // Omitting language enables model-native auto detection and code-switching.
-    // Keep Portuguese fixed for legacy Whisper routes to preserve their behavior.
-    if !is_assembly {
+    // Omitting `language` on AssemblyAI and modern multilingual STT models
+    // preserves native pt-BR + English code-switching. Keep `language=pt` only
+    // on Whisper routes where it anchors pt-BR phonetics.
+    if is_whisper {
         form = form.text("language", "pt");
     }
     if is_assembly {
         if let Some(options) = assembly {
-            let provider = serde_json::json!({ "options": { "assemblyai": options } });
-            form = form.text("provider", provider.to_string());
+            if options.prompt.is_some() || !options.keyterms_prompt.is_empty() {
+                let provider = serde_json::json!({ "options": { "assemblyai": options } });
+                form = form.text("provider", provider.to_string());
+            }
         }
     } else if let Some(provider) = whisper_provider_preferences(model, vocabulary_prompt) {
         form = form.text(
@@ -582,9 +582,6 @@ pub async fn transcribe_audio_with_assembly(
     let parsed: TranscriptionResponse = serde_json::from_str(&response_body)
         .map_err(|e| format!("OpenRouter STT: resposta inválida: {e}"))?;
     let text = parsed.text.trim().to_string();
-    if text.is_empty() {
-        return Err("OpenRouter STT não retornou texto.".into());
-    }
     let usage = parsed.usage.unwrap_or_default();
     Ok(OpenRouterGenerateResult {
         text,
@@ -617,7 +614,7 @@ fn audio_format(ext: &str) -> Result<&'static str, String> {
         "webm" => Ok("webm"),
         "aac" => Ok("aac"),
         other => Err(format!(
-            "OpenRouter Gemini: formato de áudio não suportado: {other}"
+            "OpenRouter: formato de áudio não suportado: {other}"
         )),
     }
 }
@@ -639,7 +636,7 @@ mod tests {
     #[test]
     fn request_matches_openrouter_audio_contract() {
         let body = ChatRequest {
-            model: "google/gemini-3.6-flash",
+            model: "openai/gpt-audio-mini",
             messages: vec![
                 Message {
                     role: "system",
@@ -661,7 +658,7 @@ mod tests {
             stream: false,
         };
         let json = serde_json::to_value(body).unwrap();
-        assert_eq!(json["model"], "google/gemini-3.6-flash");
+        assert_eq!(json["model"], "openai/gpt-audio-mini");
         assert_eq!(json["messages"][0]["role"], "system");
         assert_eq!(json["messages"][0]["content"], "política");
         assert_eq!(json["messages"][1]["content"][1]["type"], "input_audio");
@@ -688,21 +685,37 @@ mod tests {
     }
 
     #[test]
-    fn automatic_route_recognizes_common_stt_and_llm_ids() {
-        assert!(model_looks_dedicated_stt("google/chirp-3"));
+    fn automatic_route_recognizes_common_stt_and_multimodal_ids() {
+        assert!(model_looks_dedicated_stt("assemblyai/universal-3-6-pro"));
         assert!(model_looks_dedicated_stt("openai/whisper-large-v3"));
         assert!(model_looks_dedicated_stt("openai/gpt-4o-mini-transcribe"));
-        assert!(!model_looks_dedicated_stt("google/gemini-3.7-flash"));
+        assert!(model_looks_dedicated_stt("openai/gpt-4o-transcribe"));
+        assert!(!model_looks_dedicated_stt("openai/gpt-audio-mini"));
+    }
+
+    #[test]
+    fn assembly_options_omit_empty_fields_and_have_no_conversation_context() {
+        let opts = AssemblyAiOptions {
+            prompt: Some("Voice dictation in Brazilian Portuguese and English.".into()),
+            keyterms_prompt: vec!["Sonora".into()],
+        };
+        let json = serde_json::to_value(&opts).unwrap();
+        assert_eq!(
+            json["prompt"],
+            "Voice dictation in Brazilian Portuguese and English."
+        );
+        assert_eq!(json["keyterms_prompt"], serde_json::json!(["Sonora"]));
+        assert!(json.get("conversation_context").is_none());
     }
 
     #[test]
     fn stt_catalog_shape_extracts_model_ids() {
         let catalog: ModelCatalogResponse = serde_json::from_str(
-            r#"{"data":[{"id":"google/chirp-3"},{"id":"openai/whisper-large-v3"}]}"#,
+            r#"{"data":[{"id":"assemblyai/universal-3-6-pro"},{"id":"openai/whisper-large-v3"}]}"#,
         )
         .unwrap();
         let ids: HashSet<_> = catalog.data.into_iter().map(|entry| entry.id).collect();
-        assert!(ids.contains("google/chirp-3"));
+        assert!(ids.contains("assemblyai/universal-3-6-pro"));
         assert!(ids.contains("openai/whisper-large-v3"));
     }
 

@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.5.0" src="https://img.shields.io/badge/vers%C3%A3o-2.5.0-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.6.0" src="https://img.shields.io/badge/vers%C3%A3o-2.6.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
@@ -45,7 +45,14 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 <br>
 
-## Novidades desta versão (2.5.0)
+## Novidades desta versão (2.6.0)
+
+- **AssemblyAI direta (`assemblyai-stt-3-7`):** provedor independente com chave de API própria utilizando a API oficial pré-gravada (`/v2/upload`, `/v2/transcript` com `speech_models`, polling e recuperação), preservando a comparação com **Universal-3.6 Pro** pelo OpenRouter.
+- **Pipeline acústico aprimorado:** normalização dinâmica conservadora em duas passagens com preservação do áudio original quando já está bem nivelado, proteção de vozes baixas/altas e mudanças bruscas de volume sem distorção, pré-buffer de 500 ms e preservação de pausas longas sem encerrar a captura nem gerar alucinações no silêncio.
+- **OpenRouter mais flexível e catálogo limpo:** remoção completa do Google AI Studio e de modelos Gemini do catálogo; suporte para inserir e salvar qualquer ID customizado compatível do OpenRouter.
+- **Simplificação e qualidade:** remoção completa do Contexto Inteligente mantendo o vocabulário personalizado, otimização de prompts/keyterms da AssemblyAI e novos testes comparativos de precisão.
+
+### Novidades anteriores (2.5.0)
 
 **Mais simples.** O Sonora agora faz uma coisa só e bem feita: você fala, ele transcreve e cola o texto no campo em foco.
 

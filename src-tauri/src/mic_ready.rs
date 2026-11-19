@@ -37,10 +37,12 @@ pub enum MicReadyMode {
 /// Idle time after which an `AfterUse` stream is released.
 pub const AFTER_USE_WINDOW: Duration = Duration::from_secs(10 * 60);
 /// Audio before the shortcut that is prepended to a dictation.
-pub const PREROLL_MS: u64 = 400;
+/// 500 ms protects initial consonants and pt-BR unstressed prefixes spoken
+/// right as the user hits the shortcut.
+pub const PREROLL_MS: u64 = 500;
 /// Audio kept in the idle ring buffer. Larger than [`PREROLL_MS`] so start-up
 /// work between the shortcut and the splice never eats into the pre-roll.
-const PREROLL_KEEP_MS: u64 = 1_500;
+const PREROLL_KEEP_MS: u64 = 2_000;
 /// A stream without callbacks for this long is treated as dead (sleep/resume,
 /// driver reset) and reopened.
 const STALL_AFTER: Duration = Duration::from_secs(2);

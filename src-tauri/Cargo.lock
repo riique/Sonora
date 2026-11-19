@@ -3868,7 +3868,7 @@ dependencies = [
 
 [[package]]
 name = "sonora"
-version = "2.5.0"
+version = "2.6.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -3877,7 +3877,6 @@ dependencies = [
  "env_logger",
  "log",
  "parking_lot",
- "png 0.17.16",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

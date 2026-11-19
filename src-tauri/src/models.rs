@@ -297,11 +297,11 @@ pub struct ApiKeys {
     #[serde(default, deserialize_with = "deserialize_key_list")]
     pub groq: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_key_list")]
-    pub google: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_key_list")]
     pub deepgram: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_key_list")]
     pub openrouter: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_key_list")]
+    pub assemblyai: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_key_list")]
     pub meta: Vec<String>,
 }
@@ -340,9 +340,9 @@ impl ApiKeys {
     pub fn normalized(self) -> Self {
         Self {
             groq: normalized_keys(self.groq),
-            google: normalized_keys(self.google),
             deepgram: normalized_keys(self.deepgram),
             openrouter: normalized_keys(self.openrouter),
+            assemblyai: normalized_keys(self.assemblyai),
             meta: normalized_keys(self.meta),
         }
     }
@@ -355,19 +355,21 @@ mod api_keys_tests {
     use super::{ApiKeys, AppState};
 
     #[test]
-    fn migrates_legacy_single_keys_to_lists() {
-        let keys: ApiKeys =
-            serde_json::from_str(r#"{"groq":"g-one","google":"a-one","deepgram":null}"#).unwrap();
+    fn migrates_legacy_single_keys_to_lists_and_ignores_removed_google_key() {
+        let keys: ApiKeys = serde_json::from_str(
+            r#"{"groq":"g-one","google":"a-one","assemblyai":"aai-one","deepgram":null}"#,
+        )
+        .unwrap();
         assert_eq!(keys.groq, vec!["g-one"]);
-        assert_eq!(keys.google, vec!["a-one"]);
+        assert_eq!(keys.assemblyai, vec!["aai-one"]);
         assert!(keys.deepgram.is_empty());
     }
 
     #[test]
     fn normalizes_lists_without_losing_order() {
         let keys: ApiKeys =
-            serde_json::from_str(r#"{"google":[" first ","second","first",""]}"#).unwrap();
-        assert_eq!(keys.normalized().google, vec!["first", "second"]);
+            serde_json::from_str(r#"{"assemblyai":[" first ","second","first",""]}"#).unwrap();
+        assert_eq!(keys.normalized().assemblyai, vec!["first", "second"]);
     }
 
     #[test]
@@ -381,23 +383,23 @@ mod api_keys_tests {
     }
 
     #[test]
-    fn serializes_and_rotates_meta_keys() {
-        let json = r#"{"meta":["meta-key-1", "meta-key-2"]}"#;
+    fn serializes_and_rotates_assemblyai_keys() {
+        let json = r#"{"assemblyai":["aai-key-1", "aai-key-2"]}"#;
         let keys: ApiKeys = serde_json::from_str(json).unwrap();
-        assert_eq!(keys.meta, vec!["meta-key-1", "meta-key-2"]);
+        assert_eq!(keys.assemblyai, vec!["aai-key-1", "aai-key-2"]);
 
         let cursor = AtomicUsize::new(0);
         assert_eq!(
-            AppState::next_key(&keys.meta, &cursor).as_deref(),
-            Some("meta-key-1")
+            AppState::next_key(&keys.assemblyai, &cursor).as_deref(),
+            Some("aai-key-1")
         );
         assert_eq!(
-            AppState::next_key(&keys.meta, &cursor).as_deref(),
-            Some("meta-key-2")
+            AppState::next_key(&keys.assemblyai, &cursor).as_deref(),
+            Some("aai-key-2")
         );
         assert_eq!(
-            AppState::next_key(&keys.meta, &cursor).as_deref(),
-            Some("meta-key-1")
+            AppState::next_key(&keys.assemblyai, &cursor).as_deref(),
+            Some("aai-key-1")
         );
     }
 }
@@ -448,11 +450,11 @@ pub struct ApiKeysPayload {
     #[serde(default)]
     pub groq: Vec<String>,
     #[serde(default)]
-    pub google: Vec<String>,
-    #[serde(default)]
     pub deepgram: Vec<String>,
     #[serde(default)]
     pub openrouter: Vec<String>,
+    #[serde(default)]
+    pub assemblyai: Vec<String>,
     #[serde(default)]
     pub meta: Vec<String>,
 }
@@ -521,10 +523,7 @@ pub struct AppState {
     /// until the gadget reports for the first time. Consumed by the cursor
     /// watcher to make the overlay click-through outside the pill.
     pub gadget_hit_rect: RwLock<Option<GadgetHitRect>>,
-    pub gemini_pipelines: RwLock<crate::pipeline_contract::GeminiPipelineConfig>,
-    pub smart_context_config: RwLock<crate::smart_context::Config>,
-    pub smart_context_task: Mutex<Option<crate::smart_context::Pending>>,
-    pub smart_context_output: RwLock<Option<crate::smart_context::Prepared>>,
+    pub transcription_pipelines: RwLock<crate::pipeline_contract::TranscriptionPipelineConfig>,
     /// Immutable session snapshot consumed by the transcription and delivery
     /// stages after recording stops.
     pub recording_session: Mutex<Option<crate::pipeline_run::RecordingSession>>,
@@ -536,9 +535,9 @@ pub struct AppState {
     /// top-level Result must remain backward-compatible with `String` errors.
     pub pending_failed_pipeline_run: Mutex<Option<crate::pipeline_run::PipelineRun>>,
     groq_key_cursor: Arc<AtomicUsize>,
-    google_key_cursor: Arc<AtomicUsize>,
     deepgram_key_cursor: Arc<AtomicUsize>,
     openrouter_key_cursor: Arc<AtomicUsize>,
+    assemblyai_key_cursor: Arc<AtomicUsize>,
     meta_key_cursor: Arc<AtomicUsize>,
 }
 
@@ -571,18 +570,17 @@ impl AppState {
             app_handle: RwLock::new(None),
             vocabulary: RwLock::new(Vec::new()),
             gadget_hit_rect: RwLock::new(None),
-            gemini_pipelines: RwLock::new(crate::pipeline_contract::GeminiPipelineConfig::default()),
-            smart_context_config: RwLock::new(crate::smart_context::Config::default()),
-            smart_context_task: Mutex::new(None),
-            smart_context_output: RwLock::new(None),
+            transcription_pipelines: RwLock::new(
+                crate::pipeline_contract::TranscriptionPipelineConfig::default(),
+            ),
             recording_session: Mutex::new(None),
             features: RwLock::new(crate::assist::FeatureSettings::default()),
             command_request: Mutex::new(None),
             pending_failed_pipeline_run: Mutex::new(None),
             groq_key_cursor: Arc::new(AtomicUsize::new(0)),
-            google_key_cursor: Arc::new(AtomicUsize::new(0)),
             deepgram_key_cursor: Arc::new(AtomicUsize::new(0)),
             openrouter_key_cursor: Arc::new(AtomicUsize::new(0)),
+            assemblyai_key_cursor: Arc::new(AtomicUsize::new(0)),
             meta_key_cursor: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -599,14 +597,17 @@ impl AppState {
         Self::next_key(&self.api_keys.read().groq, &self.groq_key_cursor)
     }
 
-    pub fn next_google_key(&self) -> Option<String> {
-        Self::next_key(&self.api_keys.read().google, &self.google_key_cursor)
-    }
-
     pub fn next_openrouter_key(&self) -> Option<String> {
         Self::next_key(
             &self.api_keys.read().openrouter,
             &self.openrouter_key_cursor,
+        )
+    }
+
+    pub fn next_assemblyai_key(&self) -> Option<String> {
+        Self::next_key(
+            &self.api_keys.read().assemblyai,
+            &self.assemblyai_key_cursor,
         )
     }
 
@@ -615,17 +616,15 @@ impl AppState {
         let _config = CONFIG_LOCK.lock();
         let mut snapshot = Self::new();
         snapshot.groq_key_cursor = self.groq_key_cursor.clone();
-        snapshot.google_key_cursor = self.google_key_cursor.clone();
         snapshot.deepgram_key_cursor = self.deepgram_key_cursor.clone();
         snapshot.openrouter_key_cursor = self.openrouter_key_cursor.clone();
+        snapshot.assemblyai_key_cursor = self.assemblyai_key_cursor.clone();
         snapshot.meta_key_cursor = self.meta_key_cursor.clone();
         snapshot.operations = self.operations.clone();
         *snapshot.api_keys.write() = self.api_keys.read().clone();
         *snapshot.app_handle.write() = self.app_handle.read().clone();
         *snapshot.vocabulary.write() = self.vocabulary.read().clone();
-        *snapshot.gemini_pipelines.write() = self.gemini_pipelines.read().clone();
-        *snapshot.smart_context_config.write() = self.smart_context_config.read().clone();
-        *snapshot.smart_context_output.write() = self.smart_context_output.read().clone();
+        *snapshot.transcription_pipelines.write() = self.transcription_pipelines.read().clone();
         *snapshot.features.write() = self.features.read().clone();
         *snapshot.recording_session.lock() = self.recording_session.lock().clone();
         Arc::new(snapshot)

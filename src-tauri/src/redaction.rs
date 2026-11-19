@@ -2,10 +2,10 @@
 static KEYS: parking_lot::RwLock<Vec<String>> = parking_lot::RwLock::new(Vec::new());
 pub fn register(keys: &crate::models::ApiKeys) {
     *KEYS.write() = [
-        &keys.google,
         &keys.groq,
         &keys.deepgram,
         &keys.openrouter,
+        &keys.assemblyai,
         &keys.meta,
     ]
     .into_iter()

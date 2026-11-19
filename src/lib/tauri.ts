@@ -17,13 +17,21 @@ export type TranscriptionMode =
   | "precise"
   | "ultra-precise";
 
-export type GeminiModel = "flash-lite35" | "flash36" | "transcribe35" | "assemblyai-universal-3-6-pro";
-export type GeminiProvider = "google-ai-studio" | "open-router";
+export type TranscriptionModel =
+  | "assemblyai-stt-3-7"
+  | "assemblyai-universal-3-6-pro"
+  | "openai-whisper-large-v3"
+  | "openai-whisper-large-v3-turbo"
+  | "openai-gpt-4o-transcribe"
+  | "openai-gpt-4o-mini-transcribe";
+export type TranscriptionProvider = "assemblyai" | "open-router";
 
-/** The single transcription route: an audio model, with Whisper as automatic backup. */
+/** The single transcription route: primary audio model, with Whisper as automatic backup. */
 export interface TranscriptionRoute {
-  provider: GeminiProvider;
-  model: GeminiModel;
+  provider: TranscriptionProvider;
+  model: TranscriptionModel;
+  use_custom_model?: boolean;
+  custom_model?: string;
 }
 
 export async function getTranscriptionRoute(): Promise<TranscriptionRoute> {
@@ -34,18 +42,8 @@ export async function setTranscriptionRoute(route: TranscriptionRoute): Promise<
   return invoke<TranscriptionRoute>("set_transcription_route", { route });
 }
 
-export interface SmartContextConfig {
-  enabled: boolean;
-  model: string;
-  history_count: 5 | 10;
-}
-export const getSmartContextConfig = () =>
-  invoke<SmartContextConfig>("get_smart_context_config");
-export const setSmartContextConfig = (config: SmartContextConfig) =>
-  invoke<SmartContextConfig>("set_smart_context_config", { config });
-
 export interface ApiKeysPayload {
-  google: string[];
+  assemblyai: string[];
   openrouter: string[];
 }
 

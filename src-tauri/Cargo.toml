@@ -1,6 +1,6 @@
 [package]
 name = "sonora"
-version = "2.5.0"
+version = "2.6.0"
 description = "Sonora desktop application"
 authors = ["Sonora"]
 edition = "2021"
@@ -29,7 +29,6 @@ thiserror = "2"
 log = "0.4"
 env_logger = "0.11"
 base64 = "0.22"
-png = "0.17"
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls"] }
 
 [target.'cfg(windows)'.dependencies]

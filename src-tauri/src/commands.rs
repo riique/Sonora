@@ -32,56 +32,31 @@ impl Serialize for CommandError {
 #[tauri::command]
 pub fn get_transcription_route(
     state: State<'_, SharedState>,
-) -> crate::pipeline_contract::GeminiPipelineChoice {
-    state.gemini_pipelines.read().fast_accurate.clone()
+) -> crate::pipeline_contract::TranscriptionRoute {
+    state.transcription_pipelines.read().fast_accurate.clone()
 }
 
 #[tauri::command]
 pub async fn set_transcription_route(
     state: State<'_, SharedState>,
-    mut route: crate::pipeline_contract::GeminiPipelineChoice,
-) -> Result<crate::pipeline_contract::GeminiPipelineChoice, CommandError> {
-    route.normalize();
+    route: crate::pipeline_contract::TranscriptionRoute,
+) -> Result<crate::pipeline_contract::TranscriptionRoute, CommandError> {
+    let route = route.validate().map_err(CommandError::InvalidPayload)?;
     log::info!(
-        "set_transcription_route: provider={:?} model={:?}",
+        "set_transcription_route: provider={:?} model={} custom={}",
         route.provider,
-        route.model
+        route.model_id(),
+        route.use_custom_model
     );
     let shared = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let _config = crate::models::CONFIG_LOCK.lock();
         crate::settings::save_transcription_route(route.clone()).map_err(CommandError::Internal)?;
-        shared.gemini_pipelines.write().fast_accurate = route.clone();
+        shared.transcription_pipelines.write().fast_accurate = route.clone();
         Ok(route)
     })
     .await
     .map_err(|e| CommandError::Internal(e.to_string()))?
-}
-
-#[tauri::command]
-pub fn get_smart_context_config(state: State<'_, SharedState>) -> crate::smart_context::Config {
-    state.smart_context_config.read().clone()
-}
-
-#[tauri::command]
-pub async fn set_smart_context_config(
-    state: State<'_, SharedState>,
-    config: crate::smart_context::Config,
-) -> Result<crate::smart_context::Config, CommandError> {
-    let config = config.validate().map_err(CommandError::InvalidPayload)?;
-    let shared = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let _guard = crate::models::CONFIG_LOCK.lock();
-        crate::settings::save_smart_context_config(config.clone())
-            .map_err(CommandError::Internal)?;
-        if !config.enabled {
-            crate::smart_context::discard(&shared);
-        }
-        *shared.smart_context_config.write() = config.clone();
-        Ok(config)
-    })
-    .await
-    .map_err(|err| CommandError::Internal(err.to_string()))?
 }
 
 /// Performs only provider-agnostic safety validation on a non-empty API key.
@@ -106,14 +81,14 @@ mod api_key_validation_tests {
 
     #[test]
     fn accepts_opaque_provider_key_formats() {
-        assert!(validate_api_key("deepgram", "0123456789abcdef0123456789abcdef01234567").is_ok());
-        assert!(validate_api_key("google", "future-format-without-known-prefix").is_ok());
+        assert!(validate_api_key("assemblyai", "0123456789abcdef0123456789abcdef").is_ok());
+        assert!(validate_api_key("openrouter", "sk-or-v1-future-format-without-prefix").is_ok());
         assert!(validate_api_key("groq", "another-opaque-format").is_ok());
     }
 
     #[test]
     fn rejects_embedded_control_characters() {
-        assert!(validate_api_key("google", "valid-part\nsecond-part").is_err());
+        assert!(validate_api_key("assemblyai", "valid-part\nsecond-part").is_err());
     }
 }
 
@@ -129,21 +104,21 @@ pub async fn save_api_keys(
     payload: ApiKeysPayload,
 ) -> Result<(), CommandError> {
     log::info!(
-        "save_api_keys: groq={} google={} deepgram={} openrouter={} meta={}",
+        "save_api_keys: groq={} deepgram={} openrouter={} assemblyai={} meta={}",
         payload.groq.len(),
-        payload.google.len(),
         payload.deepgram.len(),
         payload.openrouter.len(),
+        payload.assemblyai.len(),
         payload.meta.len(),
     );
 
     // Treat provider credentials as opaque. Do not reject valid keys based on
-    // guessed prefixes or shapes (Deepgram keys, for example, are not UUIDs).
+    // guessed prefixes or shapes.
     for (provider, keys) in [
         ("groq", &payload.groq),
-        ("google", &payload.google),
         ("deepgram", &payload.deepgram),
         ("openrouter", &payload.openrouter),
+        ("assemblyai", &payload.assemblyai),
         ("meta", &payload.meta),
     ] {
         for key in keys {
@@ -158,11 +133,11 @@ pub async fn save_api_keys(
         let resolve = crate::secrets::resolve;
         let keys = crate::models::ApiKeys {
             groq: resolve("groq", payload.groq, &guard.groq).map_err(CommandError::Internal)?,
-            google: resolve("google", payload.google, &guard.google)
-                .map_err(CommandError::Internal)?,
             deepgram: resolve("deepgram", payload.deepgram, &guard.deepgram)
                 .map_err(CommandError::Internal)?,
             openrouter: resolve("openrouter", payload.openrouter, &guard.openrouter)
+                .map_err(CommandError::Internal)?,
+            assemblyai: resolve("assemblyai", payload.assemblyai, &guard.assemblyai)
                 .map_err(CommandError::Internal)?,
             meta: resolve("meta", payload.meta, &guard.meta).map_err(CommandError::Internal)?,
         }
@@ -213,9 +188,8 @@ pub async fn transcribe_file(
 /// `evaluate_pronunciation`
 ///
 /// Retrieves the saved audio for the history entry `id`, sends it together with
-/// its transcribed text to Gemini Multimodal (using the stored Google API key)
-/// and returns a Markdown speech assessment. The feedback is also persisted
-/// onto the history entry so it survives a restart and re-opening the card.
+/// its transcribed text via OpenRouter's audio-capable model and returns a
+/// Markdown speech assessment. The feedback is persisted onto the history entry.
 #[tauri::command]
 pub async fn evaluate_pronunciation(
     state: State<'_, SharedState>,
@@ -234,8 +208,10 @@ pub async fn evaluate_pronunciation(
         CommandError::Internal("este item não possui áudio salvo para avaliar".to_string())
     })?;
 
-    let google_key = state.next_google_key().ok_or_else(|| {
-        CommandError::Internal("configure a chave de API do Google (Gemini) em Ajustes".to_string())
+    let openrouter_key = state.next_openrouter_key().ok_or_else(|| {
+        CommandError::Internal(
+            "Configure a chave de API do OpenRouter em Ajustes → Transcrição.".to_string(),
+        )
     })?;
 
     let audio_bytes = crate::audio_store::read(&audio_path).map_err(CommandError::Internal)?;
@@ -247,10 +223,9 @@ pub async fn evaluate_pronunciation(
 
     let feedback = tokio::select! { biased;
         _ = lease.cancelled() => return Err(CommandError::Internal("Avaliação cancelada".into())),
-        result = crate::gemini::evaluate_pronunciation(audio_bytes, &ext, &entry.text, &google_key) => result.map_err(CommandError::Internal)?,
+        result = crate::assist::evaluate_pronunciation(&audio_bytes, &ext, &entry.text, &openrouter_key) => result.map_err(CommandError::Internal)?,
     };
 
-    // Persist the feedback so it is shown again without re-calling Gemini.
     if !crate::history::set_evaluation(&id, &feedback) {
         return Err(CommandError::Internal(
             "Não foi possível salvar a avaliação".into(),

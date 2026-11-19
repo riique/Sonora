@@ -4,8 +4,7 @@
 //! file — has its source audio copied into the configured directory (default:
 //! `{app_data_dir}/audio`) as `{id}.{ext}`.
 //! The resulting path is stored on the matching [`crate::models::HistoryEntry`]
-//! so the pronunciation evaluator can later re-read the exact audio bytes and
-//! hand them to Gemini.
+//! so retry and pronunciation evaluation can re-read the exact audio bytes.
 //!
 //! The default directory is resolved once during setup; the effective directory
 //! is read from settings on each operation so changes apply without restarting.

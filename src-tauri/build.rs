@@ -50,8 +50,6 @@ fn main() {
             "generate_ai_voice_profile",
             "add_insight_correction_to_vocabulary",
             "get_transcription_route",
-            "get_smart_context_config",
-            "set_smart_context_config",
             "set_transcription_route",
             "list_recovery_audio",
         ]),

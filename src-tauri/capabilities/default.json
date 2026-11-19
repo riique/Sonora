@@ -70,8 +70,6 @@
     "allow-install-update",
     "allow-get-transcription-route",
     "allow-set-transcription-route",
-    "allow-list-recovery-audio",
-    "allow-get-smart-context-config",
-    "allow-set-smart-context-config"
+    "allow-list-recovery-audio"
   ]
 }

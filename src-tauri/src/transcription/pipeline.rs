@@ -1,7 +1,7 @@
 //! History entry helpers shared by the dictation and retry paths.
 
 use crate::models::{AppState, HistoryEntry};
-use crate::pipeline_contract::{GeminiProvider, TranscriptionMode};
+use crate::pipeline_contract::{TranscriptionMode, TranscriptionProvider};
 use crate::pipeline_run::{
     epoch_ms, AttemptStatus, AudioTransport, PipelineError, PipelineErrorKind, PipelineRun,
     ProviderAttempt, StageKind, StageRecord, PIPELINE_RUN_SCHEMA_VERSION,
@@ -23,16 +23,16 @@ fn failed_run(state: &AppState, history_id: &str, error_msg: &str) -> PipelineRu
     run.session_id = format!("{history_id}-session");
     run.started_at_ms = now;
     run.error = Some(error.clone());
-    let choice = state.gemini_pipelines.read().fast_accurate.clone();
-    let provider = match choice.provider {
-        GeminiProvider::GoogleAiStudio => "google-ai-studio",
-        GeminiProvider::OpenRouter => "openrouter",
+    let choice = state.transcription_pipelines.read().fast_accurate.clone();
+    let (provider, transport) = match choice.provider {
+        TranscriptionProvider::AssemblyAi => ("assemblyai", AudioTransport::RawBinary),
+        TranscriptionProvider::OpenRouter => ("openrouter", AudioTransport::Multipart),
     };
     run.add_attempt(ProviderAttempt {
         id: format!("{}-attempt-1", run.id),
         provider: provider.into(),
         model: choice.model_id().into(),
-        transport: AudioTransport::InlineBase64,
+        transport,
         started_at_ms: now,
         duration_ms: Some(0),
         status: AttemptStatus::Failed,
