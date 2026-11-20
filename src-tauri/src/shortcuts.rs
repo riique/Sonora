@@ -181,6 +181,7 @@ pub fn handle_toggle(app: &AppHandle, state: &SharedState) -> bool {
                         }
 
                         state_bg.mark_recording_start();
+                        crate::transcription::prewarm_provider_connection(&state_bg);
                         if let Err(e) = app_bg.emit(event_names::RECORDING_STARTED, &ready_status) {
                             log::warn!("failed to emit {}: {}", event_names::RECORDING_STARTED, e);
                         }

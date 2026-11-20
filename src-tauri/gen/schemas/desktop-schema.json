@@ -213,6 +213,12 @@
           "markdownDescription": "Enables the delete_history_entry command without any pre-configured scope."
         },
         {
+          "description": "Enables the dismiss_all_recovery_audio command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-dismiss-all-recovery-audio",
+          "markdownDescription": "Enables the dismiss_all_recovery_audio command without any pre-configured scope."
+        },
+        {
           "description": "Enables the evaluate_pronunciation command without any pre-configured scope.",
           "type": "string",
           "const": "allow-evaluate-pronunciation",
@@ -511,6 +517,12 @@
           "type": "string",
           "const": "deny-delete-history-entry",
           "markdownDescription": "Denies the delete_history_entry command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the dismiss_all_recovery_audio command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-dismiss-all-recovery-audio",
+          "markdownDescription": "Denies the dismiss_all_recovery_audio command without any pre-configured scope."
         },
         {
           "description": "Denies the evaluate_pronunciation command without any pre-configured scope.",

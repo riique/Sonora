@@ -49,12 +49,28 @@ pub fn list_recovery_audio() -> Vec<RecoveryAudio> {
     recovery_audio
 }
 pub fn mark_capture_complete(session_id: &str) {
-    if !safe_id(session_id) {
+    write_marker(&format!("recovery-{session_id}"), b"history_saved");
+}
+/// A cancelled recording was discarded on purpose; it is not "interrupted".
+/// The audio stays on disk, only the recovery list stops offering it.
+pub fn mark_capture_cancelled(session_id: &str) {
+    write_marker(&format!("recovery-{session_id}"), b"cancelled");
+}
+/// Marks every listed recording as resolved without deleting any audio.
+pub fn dismiss_all_recovery_audio() -> usize {
+    let items = list_recovery_audio();
+    for item in &items {
+        write_marker(&item.id, b"dismissed");
+    }
+    items.len()
+}
+fn write_marker(file_stem: &str, note: &[u8]) {
+    if !safe_id(file_stem) {
         return;
     }
     if let Ok(directory) = recovery_dir() {
-        let path = directory.join(format!("recovery-{session_id}.completed"));
-        if let Err(error) = crate::storage::atomic_write(&path, b"history_saved") {
+        let path = directory.join(format!("{file_stem}.completed"));
+        if let Err(error) = crate::storage::atomic_write(&path, note) {
             log::warn!("recovery marker: {error}");
         }
     }

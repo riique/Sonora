@@ -47,6 +47,16 @@ fn http_client() -> Result<&'static reqwest::Client, String> {
         .ok_or_else(|| "AssemblyAI HTTP client unavailable".into())
 }
 
+/// Opens (or refreshes) the pooled TLS connection so the dictation request
+/// does not pay the handshake. The response status is irrelevant.
+pub async fn warm_connection() {
+    let Ok(client) = http_client() else { return };
+    let request = client.head(DEFAULT_BASE_URL).send();
+    if let Ok(Ok(response)) = tokio::time::timeout(Duration::from_secs(5), request).await {
+        let _ = response.bytes().await;
+    }
+}
+
 /// Builds a clean `keyterms_prompt` list from the user's enabled custom
 /// vocabulary. Strict terms come first; phonetic mishearing aliases are never
 /// sent as keyterms because they represent the *wrong* spellings.

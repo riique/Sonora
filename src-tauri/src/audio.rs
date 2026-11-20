@@ -546,12 +546,21 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
             ..Default::default()
         },
     );
-    let audio_path = crate::audio_store::save(&id, "wav", &wav);
-    if audio_path.is_some() {
-        if let Some(original_wav) = original_wav.as_ref() {
-            let _ = crate::audio_store::save_original(&id, "wav", original_wav);
-        }
-    }
+    // Disk persistence (with fsync) runs beside the provider request instead
+    // of in front of it; the path is awaited before history is written.
+    let audio_save = {
+        let id = id.clone();
+        let wav = wav.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let path = crate::audio_store::save(&id, "wav", &wav);
+            if path.is_some() {
+                if let Some(original_wav) = original_wav.as_ref() {
+                    let _ = crate::audio_store::save_original(&id, "wav", original_wav);
+                }
+            }
+            path
+        })
+    };
     let audio_prepare_ms = audio_prepare_started.elapsed().as_millis() as u64;
 
     {
@@ -565,7 +574,7 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
                 ..Default::default()
             },
         );
-        match crate::transcription::run_product_mode_with_duration(
+        let transcription = crate::transcription::run_product_mode_with_duration(
             state,
             wav,
             "audio.wav",
@@ -573,8 +582,15 @@ async fn stop_capture_inner(state: &Arc<AppState>) -> Option<String> {
             "wav",
             Some(duration_ms),
         )
-        .await
-        {
+        .await;
+        let audio_path = match audio_save.await {
+            Ok(path) => path,
+            Err(error) => {
+                log::error!("audio_store: background save failed: {error}");
+                None
+            }
+        };
+        match transcription {
             Ok(mut result) => {
                 if result.id.is_empty() {
                     result.id = format!("{id}-run-{}", crate::pipeline_run::epoch_ms());
@@ -1307,10 +1323,14 @@ pub(crate) fn now_timestamp() -> String {
 /// Discards the recording without building a WAV buffer and releases (or
 /// keeps ready) the input stream. Used by the panic shortcut.
 pub fn cancel_capture(state: &Arc<AppState>) {
-    state.capture_spool.lock().take();
+    // Dropping the spool flushes and closes its file before it is marked.
+    let spool = state.capture_spool.lock().take();
+    drop(spool);
     crate::mic_ready::release_after_capture(state);
     state.clear_audio_buffer();
-    state.recording_session.lock().take();
+    if let Some(session) = state.recording_session.lock().take() {
+        crate::maintenance::mark_capture_cancelled(&session.id);
+    }
     state.command_request.lock().take();
     log::info!("audio: capture cancelled, buffers released");
 }

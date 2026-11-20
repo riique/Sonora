@@ -7,6 +7,7 @@ pub mod capture_spool;
 pub mod commands;
 pub mod context;
 pub mod elevation;
+pub mod elevenlabs;
 pub mod history;
 pub mod insights;
 pub mod insights_intelligence;
@@ -1550,6 +1551,7 @@ pub fn run() {
             commands::get_transcription_route,
             commands::set_transcription_route,
             commands::list_recovery_audio,
+            commands::dismiss_all_recovery_audio,
             commands::repair_history_journal,
             commands::transcribe_file,
             commands::evaluate_pronunciation,

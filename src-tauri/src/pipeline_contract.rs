@@ -113,6 +113,9 @@ pub enum TranscriptionProvider {
     #[serde(rename = "assemblyai")]
     AssemblyAi,
     OpenRouter,
+    /// ElevenLabs Speech-to-Text API called directly with the user's key.
+    #[serde(rename = "elevenlabs")]
+    ElevenLabs,
 }
 
 impl<'de> Deserialize<'de> for TranscriptionProvider {
@@ -124,11 +127,12 @@ impl<'de> Deserialize<'de> for TranscriptionProvider {
         match value.as_str() {
             "assemblyai" | "assembly-ai" => Ok(Self::AssemblyAi),
             "open-router" | "openrouter" | "meta" => Ok(Self::OpenRouter),
+            "elevenlabs" | "eleven-labs" => Ok(Self::ElevenLabs),
             // Legacy Google AI Studio installs migrate safely to direct AssemblyAI.
             "google-ai-studio" => Ok(Self::AssemblyAi),
             _ => Err(serde::de::Error::unknown_variant(
                 &value,
-                &["assemblyai", "open-router"],
+                &["assemblyai", "open-router", "elevenlabs"],
             )),
         }
     }
@@ -143,18 +147,12 @@ pub enum TranscriptionModel {
     /// AssemblyAI Universal-3.6 Pro via OpenRouter STT endpoint.
     #[serde(rename = "assemblyai-universal-3-6-pro")]
     AssemblyAiUniversal36Pro,
-    /// OpenAI Whisper Large v3 via OpenRouter STT endpoint.
-    #[serde(rename = "openai-whisper-large-v3")]
-    OpenAiWhisperLargeV3,
-    /// OpenAI Whisper Large v3 Turbo via OpenRouter STT endpoint.
-    #[serde(rename = "openai-whisper-large-v3-turbo")]
-    OpenAiWhisperLargeV3Turbo,
-    /// OpenAI GPT-4o Transcribe via OpenRouter STT endpoint.
-    #[serde(rename = "openai-gpt-4o-transcribe")]
-    OpenAiGpt4oTranscribe,
-    /// OpenAI GPT-4o Mini Transcribe via OpenRouter STT endpoint.
-    #[serde(rename = "openai-gpt-4o-mini-transcribe")]
-    OpenAiGpt4oMiniTranscribe,
+    /// ElevenLabs Scribe v2 via OpenRouter STT endpoint.
+    #[serde(rename = "elevenlabs-scribe-v2")]
+    ElevenLabsScribeV2,
+    /// ElevenLabs Scribe v3 via the direct ElevenLabs Speech-to-Text API.
+    #[serde(rename = "elevenlabs-scribe-v3")]
+    ElevenLabsScribeV3,
 }
 
 impl<'de> Deserialize<'de> for TranscriptionModel {
@@ -166,10 +164,13 @@ impl<'de> Deserialize<'de> for TranscriptionModel {
         match value.as_str() {
             "assemblyai-stt-3-7" => Ok(Self::AssemblyAiStt37),
             "assemblyai-universal-3-6-pro" => Ok(Self::AssemblyAiUniversal36Pro),
-            "openai-whisper-large-v3" => Ok(Self::OpenAiWhisperLargeV3),
-            "openai-whisper-large-v3-turbo" => Ok(Self::OpenAiWhisperLargeV3Turbo),
-            "openai-gpt-4o-transcribe" => Ok(Self::OpenAiGpt4oTranscribe),
-            "openai-gpt-4o-mini-transcribe" => Ok(Self::OpenAiGpt4oMiniTranscribe),
+            "elevenlabs-scribe-v2" => Ok(Self::ElevenLabsScribeV2),
+            "elevenlabs-scribe-v3" => Ok(Self::ElevenLabsScribeV3),
+            // Retired OpenAI presets migrate to the default OpenRouter preset.
+            "openai-whisper-large-v3"
+            | "openai-whisper-large-v3-turbo"
+            | "openai-gpt-4o-transcribe"
+            | "openai-gpt-4o-mini-transcribe" => Ok(Self::AssemblyAiUniversal36Pro),
             // Legacy Gemini/Meta presets migrate safely without breaking old settings.json.
             "flash-lite35"
             | "flash36"
@@ -183,10 +184,8 @@ impl<'de> Deserialize<'de> for TranscriptionModel {
                 &[
                     "assemblyai-stt-3-7",
                     "assemblyai-universal-3-6-pro",
-                    "openai-whisper-large-v3",
-                    "openai-whisper-large-v3-turbo",
-                    "openai-gpt-4o-transcribe",
-                    "openai-gpt-4o-mini-transcribe",
+                    "elevenlabs-scribe-v2",
+                    "elevenlabs-scribe-v3",
                 ],
             )),
         }
@@ -198,15 +197,25 @@ impl TranscriptionModel {
         match self {
             Self::AssemblyAiStt37 => crate::assemblyai::MODEL_STT_3_7,
             Self::AssemblyAiUniversal36Pro => "assemblyai/universal-3-6-pro",
-            Self::OpenAiWhisperLargeV3 => "openai/whisper-large-v3",
-            Self::OpenAiWhisperLargeV3Turbo => "openai/whisper-large-v3-turbo",
-            Self::OpenAiGpt4oTranscribe => "openai/gpt-4o-transcribe",
-            Self::OpenAiGpt4oMiniTranscribe => "openai/gpt-4o-mini-transcribe",
+            Self::ElevenLabsScribeV2 => "elevenlabs/scribe-v2",
+            Self::ElevenLabsScribeV3 => crate::elevenlabs::MODEL_SCRIBE_V3,
         }
     }
 
+    /// OpenRouter presets offered in the model selector.
+    const OPENROUTER_PRESETS: [Self; 2] =
+        [Self::AssemblyAiUniversal36Pro, Self::ElevenLabsScribeV2];
+
+    /// Maps an OpenRouter model ID back to its preset, when one exists.
+    pub fn openrouter_preset_for(model_id: &str) -> Option<Self> {
+        let id = model_id.trim();
+        Self::OPENROUTER_PRESETS
+            .into_iter()
+            .find(|preset| preset.api_id().eq_ignore_ascii_case(id))
+    }
+
     pub fn is_openrouter_catalog(self) -> bool {
-        !matches!(self, Self::AssemblyAiStt37)
+        !matches!(self, Self::AssemblyAiStt37 | Self::ElevenLabsScribeV3)
     }
 }
 
@@ -288,6 +297,10 @@ impl TranscriptionRoute {
                 self.model = TranscriptionModel::AssemblyAiStt37;
                 self.use_custom_model = false;
             }
+            TranscriptionProvider::ElevenLabs => {
+                self.model = TranscriptionModel::ElevenLabsScribeV3;
+                self.use_custom_model = false;
+            }
             TranscriptionProvider::OpenRouter => {
                 if !self.model.is_openrouter_catalog() {
                     self.model = TranscriptionModel::AssemblyAiUniversal36Pro;
@@ -295,6 +308,12 @@ impl TranscriptionRoute {
                 if self.use_custom_model {
                     // If a previously saved custom id is no longer valid, fall back cleanly.
                     if validate_custom_openrouter_model(&self.custom_model).is_err() {
+                        self.use_custom_model = false;
+                    } else if let Some(preset) =
+                        TranscriptionModel::openrouter_preset_for(&self.custom_model)
+                    {
+                        // A custom ID that matches a preset is shown as that preset.
+                        self.model = preset;
                         self.use_custom_model = false;
                     }
                 }
@@ -437,12 +456,43 @@ mod tests {
         // Reject malformed custom IDs.
         assert!(TranscriptionRoute {
             provider: TranscriptionProvider::OpenRouter,
-            model: TranscriptionModel::OpenAiWhisperLargeV3,
+            model: TranscriptionModel::ElevenLabsScribeV2,
             use_custom_model: true,
             custom_model: "not-a-valid-id".into(),
         }
         .validate()
         .is_err());
+    }
+
+    #[test]
+    fn retired_openai_presets_and_matching_custom_ids_migrate() {
+        let openai_json =
+            r#"{"model": "openai-whisper-large-v3-turbo", "provider": "open-router"}"#;
+        let parsed: TranscriptionRoute = serde_json::from_str(openai_json).unwrap();
+        assert_eq!(parsed.model, TranscriptionModel::AssemblyAiUniversal36Pro);
+
+        let custom_scribe = r#"{"model": "assemblyai-universal-3-6-pro", "provider": "open-router", "use_custom_model": true, "custom_model": " elevenlabs/scribe-v2 "}"#;
+        let parsed: TranscriptionRoute = serde_json::from_str(custom_scribe).unwrap();
+        assert_eq!(parsed.model, TranscriptionModel::ElevenLabsScribeV2);
+        assert!(!parsed.use_custom_model);
+        assert_eq!(parsed.model_id(), "elevenlabs/scribe-v2");
+
+        let direct = r#"{"model": "elevenlabs-scribe-v3", "provider": "elevenlabs"}"#;
+        let parsed: TranscriptionRoute = serde_json::from_str(direct).unwrap();
+        assert_eq!(parsed.provider, TranscriptionProvider::ElevenLabs);
+        assert_eq!(parsed.model_id(), "scribe_v3");
+
+        // An OpenRouter-only preset never leaks into the direct ElevenLabs route.
+        let mismatched = r#"{"model": "elevenlabs-scribe-v2", "provider": "elevenlabs"}"#;
+        let parsed: TranscriptionRoute = serde_json::from_str(mismatched).unwrap();
+        assert_eq!(parsed.model, TranscriptionModel::ElevenLabsScribeV3);
+
+        let preset: TranscriptionModel = serde_json::from_str(r#""elevenlabs-scribe-v2""#).unwrap();
+        assert_eq!(preset, TranscriptionModel::ElevenLabsScribeV2);
+        assert_eq!(
+            serde_json::to_string(&preset).unwrap(),
+            r#""elevenlabs-scribe-v2""#
+        );
     }
 
     #[test]

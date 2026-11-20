@@ -9,6 +9,7 @@ import {
   Copy,
   FileAudio,
   FolderOpen,
+  History,
   Loader2,
   Pause,
   Pencil,
@@ -39,7 +40,7 @@ import {
   type PipelineRun,
 } from "../lib/tauri";
 import { TranscricaoView } from "./TranscricaoView";
-import { InterruptedAudio } from "./RecoveryView";
+import { InterruptedAudio, useRecoveryAudio } from "./RecoveryView";
 
 const PAGE_SIZE = 50;
 
@@ -193,6 +194,8 @@ function PipelineInspector({ entry }: { entry: HistoryEntry }) {
 
 export function HistoricoView() {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const recovery = useRecoveryAudio();
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [month, setMonth] = useState<{ count: number; cost: number | null }>({ count: 0, cost: null });
@@ -437,6 +440,12 @@ export function HistoricoView() {
               label="Mais opções do histórico"
               actions={[
                 { label: "Copiar esta página", icon: <ClipboardCopy />, onSelect: () => void copyAll(), disabled: !hasCopyable },
+                {
+                  label: `Gravações interrompidas (${recovery.items.length})`,
+                  icon: <History />,
+                  onSelect: () => setRecoveryOpen(true),
+                  hidden: !recovery.items.length,
+                },
                 { label: "Limpar histórico", icon: <Trash2 />, onSelect: () => void clearAll(), danger: true, disabled: !items.length },
               ]}
             />
@@ -450,7 +459,14 @@ export function HistoricoView() {
         </div>
       )}
 
-      <InterruptedAudio onRecovered={() => void refresh()} />
+      {recoveryOpen && (
+        <InterruptedAudio
+          items={recovery.items}
+          refresh={recovery.refresh}
+          onClose={() => setRecoveryOpen(false)}
+          onRecovered={() => void refresh()}
+        />
+      )}
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
           <div className="relative min-w-56 flex-1">

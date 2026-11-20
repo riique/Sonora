@@ -1,4 +1,4 @@
-//! Transcription product pipeline orchestration (AssemblyAI direct, OpenRouter STT/multimodal,
+//! Transcription product pipeline orchestration (AssemblyAI direct, ElevenLabs direct, OpenRouter STT/multimodal,
 //! and automatic OpenRouter/Groq Whisper fallback on provider failure).
 
 use std::sync::Arc;
@@ -18,6 +18,7 @@ fn provider_history_label(provider: TranscriptionProvider) -> &'static str {
     match provider {
         TranscriptionProvider::AssemblyAi => "AssemblyAI",
         TranscriptionProvider::OpenRouter => "OpenRouter",
+        TranscriptionProvider::ElevenLabs => "ElevenLabs",
     }
 }
 
@@ -25,6 +26,7 @@ fn provider_slug(provider: TranscriptionProvider) -> &'static str {
     match provider {
         TranscriptionProvider::AssemblyAi => "assemblyai",
         TranscriptionProvider::OpenRouter => "openrouter",
+        TranscriptionProvider::ElevenLabs => "elevenlabs",
     }
 }
 
@@ -209,6 +211,11 @@ async fn run_openrouter_audio(
             } else {
                 None
             };
+            let keyterms = if crate::openrouter::is_elevenlabs_model(model) {
+                crate::elevenlabs::build_keyterms(&vocab)
+            } else {
+                Vec::new()
+            };
             crate::openrouter::transcribe_audio_with_assembly(
                 audio,
                 ext,
@@ -217,6 +224,7 @@ async fn run_openrouter_audio(
                 Duration::from_secs(120).max(adaptive_timeout),
                 vocab_hint.as_deref(),
                 assembly_options.as_ref(),
+                &keyterms,
             )
             .await?
         }
@@ -294,6 +302,62 @@ async fn run_direct_assemblyai(
         poll_count: Some(out.poll_count),
         generate_ms: Some(out.total_ms),
         request_ms: Some(out.total_ms),
+        ttfb_ms: None,
+        reported_total_tokens: None,
+    })
+}
+
+async fn run_direct_elevenlabs(
+    state: &AppState,
+    audio: &[u8],
+    ext: &str,
+    model: &str,
+    api_key: &str,
+    duration_ms: Option<u64>,
+) -> Result<ProviderSpeechOutput, String> {
+    let keyterms = crate::elevenlabs::build_keyterms(&state.vocabulary.read());
+    let out = crate::elevenlabs::transcribe_audio(crate::elevenlabs::ElevenLabsTranscribeRequest {
+        audio,
+        ext,
+        api_key,
+        model,
+        keyterms,
+        timeout: Duration::from_secs(120).max(adaptive_request_timeout(duration_ms, audio.len())),
+    })
+    .await?;
+
+    let mut metadata = std::collections::BTreeMap::new();
+    metadata.insert(
+        "transport".into(),
+        AudioTransport::Multipart.as_str().into(),
+    );
+    metadata.insert(
+        "audio_format".into(),
+        if out.sent_pcm { "pcm_s16le_16" } else { "file" }.into(),
+    );
+    metadata.insert("keyterms".into(), out.keyterms_sent.into());
+
+    let usage = UsageRecord {
+        audio_seconds: out.audio_duration_secs,
+        bytes_sent: Some(out.bytes_sent),
+        cost: CostRecord::default(),
+        metadata,
+        ..Default::default()
+    };
+
+    Ok(ProviderSpeechOutput {
+        text: out.text,
+        model: out.model,
+        transport: AudioTransport::Multipart,
+        usage,
+        generation_id: out.transcription_id,
+        language: out.language_code,
+        base64_ms: None,
+        upload_ms: None,
+        poll_ms: None,
+        poll_count: None,
+        generate_ms: Some(out.request_ms),
+        request_ms: Some(out.request_ms),
         ttfb_ms: None,
         reported_total_tokens: None,
     })
@@ -543,6 +607,7 @@ pub async fn run_fast_accurate(
     let api_key = match choice.provider {
         TranscriptionProvider::AssemblyAi => state.next_assemblyai_key(),
         TranscriptionProvider::OpenRouter => state.next_openrouter_key(),
+        TranscriptionProvider::ElevenLabs => state.next_elevenlabs_key(),
     };
     let glossary_block = {
         let vocab = state.vocabulary.read().clone();
@@ -552,7 +617,9 @@ pub async fn run_fast_accurate(
     let provider_id = provider_slug(choice.provider);
     let default_transport = match choice.provider {
         TranscriptionProvider::AssemblyAi => AudioTransport::RawBinary,
-        TranscriptionProvider::OpenRouter => AudioTransport::Multipart,
+        TranscriptionProvider::OpenRouter | TranscriptionProvider::ElevenLabs => {
+            AudioTransport::Multipart
+        }
     };
     log::info!(
         "modes: FastAccurate → {} model={}",
@@ -589,6 +656,7 @@ pub async fn run_fast_accurate(
                 match choice.provider {
                     TranscriptionProvider::AssemblyAi => "assemblyai-prerecorded",
                     TranscriptionProvider::OpenRouter => "openrouter-automatic",
+                    TranscriptionProvider::ElevenLabs => "elevenlabs-speech-to-text",
                 }
             ));
             stages.push("primary_transcribe".into());
@@ -596,6 +664,9 @@ pub async fn run_fast_accurate(
             let generated = match choice.provider {
                 TranscriptionProvider::AssemblyAi => {
                     run_direct_assemblyai(state, &audio, &model_id, &key, duration_ms).await
+                }
+                TranscriptionProvider::ElevenLabs => {
+                    run_direct_elevenlabs(state, &audio, ext, &model_id, &key, duration_ms).await
                 }
                 TranscriptionProvider::OpenRouter => {
                     run_openrouter_audio(
@@ -996,6 +1067,7 @@ fn remember_failed_attempts(
         let (provider, transport) = match choice.provider {
             TranscriptionProvider::AssemblyAi => ("assemblyai", AudioTransport::RawBinary),
             TranscriptionProvider::OpenRouter => ("openrouter", AudioTransport::Multipart),
+            TranscriptionProvider::ElevenLabs => ("elevenlabs", AudioTransport::Multipart),
         };
         attempts.push(failed_attempt(
             "attempt-1",

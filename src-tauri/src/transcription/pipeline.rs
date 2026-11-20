@@ -27,6 +27,7 @@ fn failed_run(state: &AppState, history_id: &str, error_msg: &str) -> PipelineRu
     let (provider, transport) = match choice.provider {
         TranscriptionProvider::AssemblyAi => ("assemblyai", AudioTransport::RawBinary),
         TranscriptionProvider::OpenRouter => ("openrouter", AudioTransport::Multipart),
+        TranscriptionProvider::ElevenLabs => ("elevenlabs", AudioTransport::Multipart),
     };
     run.add_attempt(ProviderAttempt {
         id: format!("{}-attempt-1", run.id),

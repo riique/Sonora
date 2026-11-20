@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://github.com/riique/Sonora/actions/workflows/windows.yml"><img alt="Qualificação Windows" src="https://img.shields.io/github/actions/workflow/status/riique/Sonora/windows.yml?style=flat-square&label=CI%20Windows&labelColor=171716&color=2b2b28"></a>
-  <img alt="Versão 2.6.0" src="https://img.shields.io/badge/vers%C3%A3o-2.6.0-2b2b28?style=flat-square&labelColor=171716">
+  <img alt="Versão 2.7.0" src="https://img.shields.io/badge/vers%C3%A3o-2.7.0-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Windows" src="https://img.shields.io/badge/plataforma-Windows-2b2b28?style=flat-square&labelColor=171716">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-2b2b28?style=flat-square&labelColor=171716">
 </p>
@@ -45,7 +45,14 @@ Os atalhos podem ser reconfigurados em **Ajustes › Geral**, onde também dá p
 
 <br>
 
-## Novidades desta versão (2.6.0)
+## Novidades desta versão (2.7.0)
+
+- **ElevenLabs Scribe v3 direto:** novo provedor "ElevenLabs (API direta)" com chave própria, usando a API síncrona `/v1/speech-to-text` com `scribe_v3`. O áudio vai como PCM 16 kHz cru (`pcm_s16le_16`), sem marcações de som, sem hesitações, números em dígitos e o vocabulário como `keyterms`.
+- **Seletor mais enxuto:** os modelos da OpenAI saíram da lista do OpenRouter, que fica com AssemblyAI Universal-3.6 Pro e ElevenLabs Scribe v2. O Whisper continua como reserva automática.
+- **Ditado mais rápido:** a conexão com o provedor é aberta enquanto você grava, e o áudio é salvo em disco em paralelo com o envio.
+- **Gravações interrompidas no menu ⋯ do Histórico:** a lista não ocupa mais o topo, ganhou "Dispensar todas" (sem apagar áudio) e gravações canceladas deixam de aparecer como interrompidas.
+
+### Novidades anteriores (2.6.0)
 
 - **AssemblyAI direta (`assemblyai-stt-3-7`):** provedor independente com chave de API própria utilizando a API oficial pré-gravada (`/v2/upload`, `/v2/transcript` com `speech_models`, polling e recuperação), preservando a comparação com **Universal-3.6 Pro** pelo OpenRouter.
 - **Pipeline acústico aprimorado:** normalização dinâmica conservadora em duas passagens com preservação do áudio original quando já está bem nivelado, proteção de vozes baixas/altas e mudanças bruscas de volume sem distorção, pré-buffer de 500 ms e preservação de pausas longas sem encerrar a captura nem gerar alucinações no silêncio.

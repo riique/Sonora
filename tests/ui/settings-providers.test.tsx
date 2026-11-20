@@ -57,6 +57,8 @@ test("Transcrição settings remove Google AI Studio, Gemini and Smart Context, 
 
   // Switch provider to OpenRouter: Universal-3.6 Pro and custom model ID option appear.
   const providerSelect = host.querySelector<HTMLSelectElement>("#route-provider")!;
+  expect([...providerSelect.options].map((o) => o.textContent)).toContain("ElevenLabs (API direta)");
+  expect(host.textContent).toContain("Transcrição direta com ElevenLabs Scribe v3");
   await act(async () => {
     providerSelect.value = "open-router";
     providerSelect.dispatchEvent(new Event("change", { bubbles: true }));
@@ -65,9 +67,10 @@ test("Transcrição settings remove Google AI Studio, Gemini and Smart Context, 
   const modelSelect = host.querySelector<HTMLSelectElement>("#route-model")!;
   const options = [...modelSelect.options].map((o) => o.textContent);
   expect(options).toContain("AssemblyAI Universal-3.6 Pro");
-  expect(options).toContain("OpenAI Whisper Large v3");
+  expect(options).toContain("ElevenLabs Scribe v2");
   expect(options).toContain("ID customizado do OpenRouter…");
   expect(options.some((label) => label?.toLowerCase().includes("gemini"))).toBe(false);
+  expect(options.some((label) => label?.toLowerCase().includes("openai"))).toBe(false);
 
   // Select custom OpenRouter model ID and save it.
   await act(async () => {

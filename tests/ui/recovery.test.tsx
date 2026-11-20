@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: bridge.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async (name: string, callback: (event: unknown) => void) => { bridge.listeners.set(name, callback); return () => bridge.listeners.delete(name); }) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: bridge.open, save: vi.fn() }));
 vi.mock("@tauri-apps/api/webview", () => ({ getCurrentWebview: () => ({ onDragDropEvent: async (callback: (event: unknown) => void) => { bridge.drop = callback; return () => { bridge.drop = undefined; }; } }) }));
-import { InterruptedAudio } from "../../src/views/RecoveryView";
+import { InterruptedAudio, useRecoveryAudio } from "../../src/views/RecoveryView";
 import { TranscricaoView } from "../../src/views/TranscricaoView";
 import { InicioView } from "../../src/views/InicioView";
 let host: HTMLDivElement;
@@ -49,12 +49,24 @@ test("home shows the single transcription route and quick shortcuts", async () =
   expect(host.textContent).toContain("Pronto para ditar");
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); });
-test("interrupted recordings stay hidden when there is nothing to recover", async () => {
+function RecoveryHarness({ onRecovered }: { onRecovered?: () => void }) {
+  const recovery = useRecoveryAudio();
+  const [open, setOpen] = React.useState(true);
+  if (!recovery.items.length && !open) return null;
+  return (
+    <div>
+      <span data-testid="count">{recovery.items.length}</span>
+      {open && <InterruptedAudio items={recovery.items} refresh={recovery.refresh} onClose={() => setOpen(false)} onRecovered={onRecovered} />}
+    </div>
+  );
+}
+test("interrupted recordings report an empty list", async () => {
   bridge.invoke.mockImplementation(async (name: string) => { if (name === "list_recovery_audio") return []; throw new Error(`Unexpected command: ${name}`); });
-  await act(async () => root.render(<InterruptedAudio />));
-  expect(host.textContent).toBe("");
+  await act(async () => root.render(<RecoveryHarness />));
+  expect(host.querySelector('[data-testid="count"]')?.textContent).toBe("0");
+  expect(host.textContent).toContain("Nenhuma gravação pendente.");
 });
-test("interrupted recordings can be retranscribed from the history", async () => {
+test("interrupted recordings can be retranscribed from the history menu panel", async () => {
   let pending = [{ id: "recovery-synthetic", bytes: 2 * 1048576 }];
   bridge.invoke.mockImplementation(async (name: string) => {
     if (name === "list_recovery_audio") return pending;
@@ -62,9 +74,22 @@ test("interrupted recordings can be retranscribed from the history", async () =>
     throw new Error(`Unexpected command: ${name}`);
   });
   const recovered = vi.fn();
-  await act(async () => root.render(<InterruptedAudio onRecovered={recovered} />));
+  await act(async () => root.render(<RecoveryHarness onRecovered={recovered} />));
   expect(host.textContent).toContain("1 gravação interrompida");
   await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Retranscrever")!.click());
   expect(recovered).toHaveBeenCalled();
   expect(bridge.invoke.mock.calls.some(([name]) => name === "retry_recovery_audio")).toBe(true);
+});
+test("dismissing all interrupted recordings closes the panel", async () => {
+  let pending = [{ id: "recovery-a", bytes: 1048576 }, { id: "recovery-b", bytes: 1048576 }];
+  bridge.invoke.mockImplementation(async (name: string) => {
+    if (name === "list_recovery_audio") return pending;
+    if (name === "dismiss_all_recovery_audio") { const n = pending.length; pending = []; return n; }
+    throw new Error(`Unexpected command: ${name}`);
+  });
+  await act(async () => root.render(<RecoveryHarness />));
+  expect(host.textContent).toContain("2 gravações interrompidas");
+  await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "Dispensar todas")!.click());
+  expect(bridge.invoke.mock.calls.some(([name]) => name === "dismiss_all_recovery_audio")).toBe(true);
+  expect(host.textContent).not.toContain("gravações interrompidas");
 });

@@ -70,6 +70,7 @@
     "allow-install-update",
     "allow-get-transcription-route",
     "allow-set-transcription-route",
-    "allow-list-recovery-audio"
+    "allow-list-recovery-audio",
+    "allow-dismiss-all-recovery-audio"
   ]
 }

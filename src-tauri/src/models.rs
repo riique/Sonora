@@ -303,6 +303,8 @@ pub struct ApiKeys {
     #[serde(default, deserialize_with = "deserialize_key_list")]
     pub assemblyai: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_key_list")]
+    pub elevenlabs: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_key_list")]
     pub meta: Vec<String>,
 }
 
@@ -343,6 +345,7 @@ impl ApiKeys {
             deepgram: normalized_keys(self.deepgram),
             openrouter: normalized_keys(self.openrouter),
             assemblyai: normalized_keys(self.assemblyai),
+            elevenlabs: normalized_keys(self.elevenlabs),
             meta: normalized_keys(self.meta),
         }
     }
@@ -456,6 +459,8 @@ pub struct ApiKeysPayload {
     #[serde(default)]
     pub assemblyai: Vec<String>,
     #[serde(default)]
+    pub elevenlabs: Vec<String>,
+    #[serde(default)]
     pub meta: Vec<String>,
 }
 
@@ -538,6 +543,7 @@ pub struct AppState {
     deepgram_key_cursor: Arc<AtomicUsize>,
     openrouter_key_cursor: Arc<AtomicUsize>,
     assemblyai_key_cursor: Arc<AtomicUsize>,
+    elevenlabs_key_cursor: Arc<AtomicUsize>,
     meta_key_cursor: Arc<AtomicUsize>,
 }
 
@@ -581,6 +587,7 @@ impl AppState {
             deepgram_key_cursor: Arc::new(AtomicUsize::new(0)),
             openrouter_key_cursor: Arc::new(AtomicUsize::new(0)),
             assemblyai_key_cursor: Arc::new(AtomicUsize::new(0)),
+            elevenlabs_key_cursor: Arc::new(AtomicUsize::new(0)),
             meta_key_cursor: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -611,6 +618,13 @@ impl AppState {
         )
     }
 
+    pub fn next_elevenlabs_key(&self) -> Option<String> {
+        Self::next_key(
+            &self.api_keys.read().elevenlabs,
+            &self.elevenlabs_key_cursor,
+        )
+    }
+
     /// Provider orchestration reads one immutable configuration snapshot per job.
     pub fn pipeline_snapshot(&self) -> Arc<Self> {
         let _config = CONFIG_LOCK.lock();
@@ -619,6 +633,7 @@ impl AppState {
         snapshot.deepgram_key_cursor = self.deepgram_key_cursor.clone();
         snapshot.openrouter_key_cursor = self.openrouter_key_cursor.clone();
         snapshot.assemblyai_key_cursor = self.assemblyai_key_cursor.clone();
+        snapshot.elevenlabs_key_cursor = self.elevenlabs_key_cursor.clone();
         snapshot.meta_key_cursor = self.meta_key_cursor.clone();
         snapshot.operations = self.operations.clone();
         *snapshot.api_keys.write() = self.api_keys.read().clone();

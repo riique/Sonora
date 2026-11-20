@@ -52,6 +52,7 @@ fn main() {
             "get_transcription_route",
             "set_transcription_route",
             "list_recovery_audio",
+            "dismiss_all_recovery_audio",
         ]),
     ))
     .expect("Tauri build failed");

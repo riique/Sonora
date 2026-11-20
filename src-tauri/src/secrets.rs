@@ -158,6 +158,7 @@ pub fn mask(keys: &ApiKeys) -> ApiKeys {
         deepgram: map("deepgram", &keys.deepgram),
         openrouter: map("openrouter", &keys.openrouter),
         assemblyai: map("assemblyai", &keys.assemblyai),
+        elevenlabs: map("elevenlabs", &keys.elevenlabs),
         meta: map("meta", &keys.meta),
     }
 }

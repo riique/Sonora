@@ -20,16 +20,20 @@ import type { Navigate } from "./index";
 const MODEL_LABELS: Record<TranscriptionRoute["model"], string> = {
   "assemblyai-stt-3-7": "AssemblyAI-STT-3.7",
   "assemblyai-universal-3-6-pro": "AssemblyAI Universal-3.6 Pro",
-  "openai-whisper-large-v3": "OpenAI Whisper Large v3",
-  "openai-whisper-large-v3-turbo": "OpenAI Whisper Large v3 Turbo",
-  "openai-gpt-4o-transcribe": "OpenAI GPT-4o Transcribe",
-  "openai-gpt-4o-mini-transcribe": "OpenAI GPT-4o Mini Transcribe",
+  "elevenlabs-scribe-v2": "ElevenLabs Scribe v2",
+  "elevenlabs-scribe-v3": "ElevenLabs Scribe v3",
+};
+
+const PROVIDER_LABELS: Record<TranscriptionRoute["provider"], string> = {
+  assemblyai: "AssemblyAI",
+  "open-router": "OpenRouter",
+  elevenlabs: "ElevenLabs",
 };
 
 /** One readable line describing the active route: model and provider. */
 export function routeSummary(route: TranscriptionRoute | null): string {
   if (!route) return "";
-  const provider = route.provider === "open-router" ? "OpenRouter" : "AssemblyAI";
+  const provider = PROVIDER_LABELS[route.provider] ?? route.provider;
   const modelLabel = route.provider === "open-router" && route.use_custom_model && route.custom_model?.trim()
     ? route.custom_model.trim()
     : (MODEL_LABELS[route.model] ?? route.model);

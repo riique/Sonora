@@ -20,11 +20,9 @@ export type TranscriptionMode =
 export type TranscriptionModel =
   | "assemblyai-stt-3-7"
   | "assemblyai-universal-3-6-pro"
-  | "openai-whisper-large-v3"
-  | "openai-whisper-large-v3-turbo"
-  | "openai-gpt-4o-transcribe"
-  | "openai-gpt-4o-mini-transcribe";
-export type TranscriptionProvider = "assemblyai" | "open-router";
+  | "elevenlabs-scribe-v2"
+  | "elevenlabs-scribe-v3";
+export type TranscriptionProvider = "assemblyai" | "open-router" | "elevenlabs";
 
 /** The single transcription route: primary audio model, with Whisper as automatic backup. */
 export interface TranscriptionRoute {
@@ -44,6 +42,7 @@ export async function setTranscriptionRoute(route: TranscriptionRoute): Promise<
 
 export interface ApiKeysPayload {
   assemblyai: string[];
+  elevenlabs: string[];
   openrouter: string[];
 }
 

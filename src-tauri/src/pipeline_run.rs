@@ -147,6 +147,10 @@ pub fn transport_capabilities(provider: &str, endpoint: &str) -> TransportCapabi
             streaming: true,
             ..Default::default()
         },
+        ("elevenlabs", "v1/speech-to-text") => TransportCapabilities {
+            multipart: true,
+            ..Default::default()
+        },
         ("assemblyai", "v2/transcript") => TransportCapabilities {
             raw_binary: true,
             url: true,
@@ -1133,6 +1137,8 @@ fn infer_provider(model: &str, stages: &[String]) -> String {
     let joined = stages.join(" ").to_ascii_lowercase();
     if joined.contains("openrouter") || model.contains('/') {
         "openrouter".into()
+    } else if joined.contains("elevenlabs") || model.to_ascii_lowercase().starts_with("scribe_") {
+        "elevenlabs".into()
     } else if joined.contains("assemblyai") || model.to_ascii_lowercase().starts_with("assemblyai-")
     {
         "assemblyai".into()

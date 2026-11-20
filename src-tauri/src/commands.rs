@@ -104,11 +104,12 @@ pub async fn save_api_keys(
     payload: ApiKeysPayload,
 ) -> Result<(), CommandError> {
     log::info!(
-        "save_api_keys: groq={} deepgram={} openrouter={} assemblyai={} meta={}",
+        "save_api_keys: groq={} deepgram={} openrouter={} assemblyai={} elevenlabs={} meta={}",
         payload.groq.len(),
         payload.deepgram.len(),
         payload.openrouter.len(),
         payload.assemblyai.len(),
+        payload.elevenlabs.len(),
         payload.meta.len(),
     );
 
@@ -119,6 +120,7 @@ pub async fn save_api_keys(
         ("deepgram", &payload.deepgram),
         ("openrouter", &payload.openrouter),
         ("assemblyai", &payload.assemblyai),
+        ("elevenlabs", &payload.elevenlabs),
         ("meta", &payload.meta),
     ] {
         for key in keys {
@@ -138,6 +140,8 @@ pub async fn save_api_keys(
             openrouter: resolve("openrouter", payload.openrouter, &guard.openrouter)
                 .map_err(CommandError::Internal)?,
             assemblyai: resolve("assemblyai", payload.assemblyai, &guard.assemblyai)
+                .map_err(CommandError::Internal)?,
+            elevenlabs: resolve("elevenlabs", payload.elevenlabs, &guard.elevenlabs)
                 .map_err(CommandError::Internal)?,
             meta: resolve("meta", payload.meta, &guard.meta).map_err(CommandError::Internal)?,
         }
@@ -1037,6 +1041,12 @@ pub fn repair_history_journal() -> Result<(), CommandError> {
 #[tauri::command]
 pub fn list_recovery_audio() -> Vec<crate::maintenance::RecoveryAudio> {
     crate::maintenance::list_recovery_audio()
+}
+
+/// Marks every interrupted recording as resolved; audio files are kept.
+#[tauri::command]
+pub fn dismiss_all_recovery_audio() -> usize {
+    crate::maintenance::dismiss_all_recovery_audio()
 }
 
 #[tauri::command]

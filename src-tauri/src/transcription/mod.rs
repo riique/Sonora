@@ -11,6 +11,31 @@ pub use legacy::transcribe_whisper_fallback_via_openrouter;
 pub use modes::{mode_failed_history, mode_result_to_history, run_product_mode_with_duration};
 pub use pipeline::{emit_saved, update_failed_entry};
 
+/// Warms the HTTPS connection to the active transcription provider while the
+/// user is still speaking, so stopping the recording goes straight to upload.
+pub fn prewarm_provider_connection(state: &crate::models::AppState) {
+    let provider = state.transcription_pipelines.read().fast_accurate.provider;
+    tauri::async_runtime::spawn(async move {
+        let started = std::time::Instant::now();
+        match provider {
+            crate::pipeline_contract::TranscriptionProvider::AssemblyAi => {
+                crate::assemblyai::warm_connection().await
+            }
+            crate::pipeline_contract::TranscriptionProvider::OpenRouter => {
+                crate::openrouter::warm_connection().await
+            }
+            crate::pipeline_contract::TranscriptionProvider::ElevenLabs => {
+                crate::elevenlabs::warm_connection().await
+            }
+        }
+        log::debug!(
+            "transcription: {:?} connection warmed in {}ms",
+            provider,
+            started.elapsed().as_millis()
+        );
+    });
+}
+
 const KNOWN_TRANSCRIPTION_ARTIFACTS: &[&str] = &["Legenda por Sônia Ruberti"];
 
 /// Removes deterministic phrases hallucinated by transcription engines before

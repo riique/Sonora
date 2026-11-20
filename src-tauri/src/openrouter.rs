@@ -37,6 +37,16 @@ fn http_client() -> Result<&'static reqwest::Client, String> {
         .ok_or_else(|| "OpenRouter HTTP client unavailable".into())
 }
 
+/// Opens (or refreshes) the pooled TLS connection so the dictation request
+/// does not pay the handshake. The response status is irrelevant.
+pub async fn warm_connection() {
+    let Ok(client) = http_client() else { return };
+    let request = client.head("https://openrouter.ai/api/v1/models").send();
+    if let Ok(Ok(response)) = tokio::time::timeout(Duration::from_secs(5), request).await {
+        let _ = response.bytes().await;
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenRouterAudioRoute {
     MultimodalLlm,
@@ -186,6 +196,25 @@ pub struct OpenRouterTextResult {
     pub bytes_sent: u64,
 }
 
+/// Returns true for ElevenLabs Scribe models routed via OpenRouter.
+pub fn is_elevenlabs_model(model: &str) -> bool {
+    model.trim().to_ascii_lowercase().starts_with("elevenlabs/")
+}
+
+/// Dictation defaults forwarded to ElevenLabs through OpenRouter's provider
+/// passthrough. OpenRouter silently drops keys a provider does not accept.
+fn elevenlabs_provider_options() -> serde_json::Value {
+    serde_json::json!({
+        "options": {
+            "elevenlabs": {
+                "tag_audio_events": false,
+                "no_verbatim": true,
+                "timestamps_granularity": "none"
+            }
+        }
+    })
+}
+
 /// Returns true for AssemblyAI STT models routed via OpenRouter.
 pub fn is_assemblyai_model(model: &str) -> bool {
     let id = model.trim().to_ascii_lowercase();
@@ -199,6 +228,7 @@ fn model_looks_dedicated_stt(model: &str) -> bool {
         || id.contains("chirp")
         || id.starts_with("assemblyai/")
         || id.starts_with("deepgram/")
+        || id.starts_with("elevenlabs/")
 }
 
 fn whisper_provider_preferences(
@@ -470,10 +500,23 @@ pub async fn transcribe_audio(
     timeout: Duration,
     vocabulary_prompt: Option<&str>,
 ) -> Result<OpenRouterGenerateResult, String> {
-    transcribe_audio_with_assembly(audio, ext, model, api_key, timeout, vocabulary_prompt, None)
-        .await
+    transcribe_audio_with_assembly(
+        audio,
+        ext,
+        model,
+        api_key,
+        timeout,
+        vocabulary_prompt,
+        None,
+        &[],
+    )
+    .await
 }
 
+/// Sends one dedicated-STT request. `keyterms` are only forwarded to
+/// ElevenLabs models; if OpenRouter refuses them (400/422) the request is
+/// retried once without them so vocabulary never costs a dictation.
+#[allow(clippy::too_many_arguments)]
 pub async fn transcribe_audio_with_assembly(
     audio: &[u8],
     ext: &str,
@@ -482,6 +525,7 @@ pub async fn transcribe_audio_with_assembly(
     timeout: Duration,
     vocabulary_prompt: Option<&str>,
     assembly: Option<&AssemblyAiOptions>,
+    keyterms: &[String],
 ) -> Result<OpenRouterGenerateResult, String> {
     if audio.is_empty() {
         return Err("OpenRouter STT: o áudio está vazio.".into());
@@ -497,7 +541,36 @@ pub async fn transcribe_audio_with_assembly(
     {
         return Err("OpenRouter STT: áudio excede o limite multipart de 25 MB.".into());
     }
+    let keyterms: &[String] = if is_elevenlabs_model(model) {
+        keyterms
+    } else {
+        &[]
+    };
+    let form = build_transcription_form(audio, ext, model, vocabulary_prompt, assembly, keyterms)?;
+    match send_transcription(form, api_key, timeout, audio.len()).await {
+        Err(SttFailure::Rejected(message)) if !keyterms.is_empty() => {
+            log::warn!(
+                "OpenRouter STT: {} keyterms recusados para {model}; repetindo sem eles: {message}",
+                keyterms.len()
+            );
+            let form =
+                build_transcription_form(audio, ext, model, vocabulary_prompt, assembly, &[])?;
+            send_transcription(form, api_key, timeout, audio.len())
+                .await
+                .map_err(SttFailure::into_message)
+        }
+        result => result.map_err(SttFailure::into_message),
+    }
+}
 
+fn build_transcription_form(
+    audio: &[u8],
+    ext: &str,
+    model: &str,
+    vocabulary_prompt: Option<&str>,
+    assembly: Option<&AssemblyAiOptions>,
+    keyterms: &[String],
+) -> Result<multipart::Form, String> {
     let format = audio_format(ext)?;
     let filename = format!("audio.{format}");
     let mime = match format {
@@ -532,13 +605,40 @@ pub async fn transcribe_audio_with_assembly(
                 form = form.text("provider", provider.to_string());
             }
         }
+    } else if is_elevenlabs_model(model) {
+        form = form.text("provider", elevenlabs_provider_options().to_string());
+        for term in keyterms {
+            form = form.text("keyterms[]", term.clone());
+        }
     } else if let Some(provider) = whisper_provider_preferences(model, vocabulary_prompt) {
         form = form.text(
             "provider",
             serde_json::to_string(&provider).map_err(|error| error.to_string())?,
         );
     }
+    Ok(form)
+}
 
+enum SttFailure {
+    /// 400/422: OpenRouter refused the request shape.
+    Rejected(String),
+    Other(String),
+}
+
+impl SttFailure {
+    fn into_message(self) -> String {
+        match self {
+            Self::Rejected(message) | Self::Other(message) => message,
+        }
+    }
+}
+
+async fn send_transcription(
+    form: multipart::Form,
+    api_key: &str,
+    timeout: Duration,
+    audio_len: usize,
+) -> Result<OpenRouterGenerateResult, SttFailure> {
     let started = Instant::now();
     let exchange = async {
         let response = http_client()?
@@ -565,22 +665,28 @@ pub async fn transcribe_audio_with_assembly(
     let (status, generation_id, response_body, ttfb_ms) = tokio::time::timeout(timeout, exchange)
         .await
         .map_err(|_| {
-            format!(
+            SttFailure::Other(format!(
                 "OpenRouter STT: timeout após {} segundos.",
                 timeout.as_secs()
-            )
-        })??;
+            ))
+        })?
+        .map_err(SttFailure::Other)?;
     let request_ms = started.elapsed().as_millis() as u64;
     if !status.is_success() {
-        return Err(format!(
+        let message = format!(
             "OpenRouter STT retornou status {}: {}",
             status.as_u16(),
             truncate_error(&response_body, 800)
-        ));
+        );
+        return Err(if matches!(status.as_u16(), 400 | 422) {
+            SttFailure::Rejected(message)
+        } else {
+            SttFailure::Other(message)
+        });
     }
 
     let parsed: TranscriptionResponse = serde_json::from_str(&response_body)
-        .map_err(|e| format!("OpenRouter STT: resposta inválida: {e}"))?;
+        .map_err(|e| SttFailure::Other(format!("OpenRouter STT: resposta inválida: {e}")))?;
     let text = parsed.text.trim().to_string();
     let usage = parsed.usage.unwrap_or_default();
     Ok(OpenRouterGenerateResult {
@@ -595,7 +701,7 @@ pub async fn transcribe_audio_with_assembly(
         reported_audio_seconds: usage.seconds,
         reported_cost_usd: usage.cost,
         transport: AudioTransport::Multipart,
-        bytes_sent: audio.len() as u64,
+        bytes_sent: audio_len as u64,
     })
 }
 
@@ -690,6 +796,7 @@ mod tests {
         assert!(model_looks_dedicated_stt("openai/whisper-large-v3"));
         assert!(model_looks_dedicated_stt("openai/gpt-4o-mini-transcribe"));
         assert!(model_looks_dedicated_stt("openai/gpt-4o-transcribe"));
+        assert!(model_looks_dedicated_stt("elevenlabs/scribe-v2"));
         assert!(!model_looks_dedicated_stt("openai/gpt-audio-mini"));
     }
 
@@ -706,6 +813,16 @@ mod tests {
         );
         assert_eq!(json["keyterms_prompt"], serde_json::json!(["Sonora"]));
         assert!(json.get("conversation_context").is_none());
+    }
+
+    #[test]
+    fn elevenlabs_options_disable_tags_and_fillers() {
+        let value = elevenlabs_provider_options();
+        let options = &value["options"]["elevenlabs"];
+        assert_eq!(options["tag_audio_events"], false);
+        assert_eq!(options["no_verbatim"], true);
+        assert!(is_elevenlabs_model(" ElevenLabs/scribe-v2 "));
+        assert!(!is_elevenlabs_model("assemblyai/universal-3-6-pro"));
     }
 
     #[test]

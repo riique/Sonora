@@ -6,6 +6,7 @@ pub fn register(keys: &crate::models::ApiKeys) {
         &keys.deepgram,
         &keys.openrouter,
         &keys.assemblyai,
+        &keys.elevenlabs,
         &keys.meta,
     ]
     .into_iter()

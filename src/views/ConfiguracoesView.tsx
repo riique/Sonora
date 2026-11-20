@@ -264,12 +264,13 @@ const DIRECT_ASSEMBLYAI_MODELS: { id: TranscriptionModel; label: string }[] = [
   { id: "assemblyai-stt-3-7", label: "AssemblyAI-STT-3.7 (assemblyai-stt-3-7)" },
 ];
 
+const DIRECT_ELEVENLABS_MODELS: { id: TranscriptionModel; label: string }[] = [
+  { id: "elevenlabs-scribe-v3", label: "ElevenLabs Scribe v3 (scribe_v3)" },
+];
+
 const OPENROUTER_MODELS: { id: TranscriptionModel; label: string }[] = [
   { id: "assemblyai-universal-3-6-pro", label: "AssemblyAI Universal-3.6 Pro" },
-  { id: "openai-whisper-large-v3", label: "OpenAI Whisper Large v3" },
-  { id: "openai-whisper-large-v3-turbo", label: "OpenAI Whisper Large v3 Turbo" },
-  { id: "openai-gpt-4o-transcribe", label: "OpenAI GPT-4o Transcribe" },
-  { id: "openai-gpt-4o-mini-transcribe", label: "OpenAI GPT-4o Mini Transcribe" },
+  { id: "elevenlabs-scribe-v2", label: "ElevenLabs Scribe v2" },
 ];
 
 const CUSTOM_MODEL_OPTION = "__custom__";
@@ -324,13 +325,15 @@ function TranscricaoTab() {
 
   const availableModels = route?.provider === "open-router"
     ? OPENROUTER_MODELS
-    : DIRECT_ASSEMBLYAI_MODELS;
+    : route?.provider === "elevenlabs"
+      ? DIRECT_ELEVENLABS_MODELS
+      : DIRECT_ASSEMBLYAI_MODELS;
 
   return (
     <div>
       <Section
         title="Modelo"
-        description="Use AssemblyAI-STT-3.7 diretamente pela API oficial ou compare com modelos do OpenRouter (como Universal-3.6 Pro) e qualquer ID customizado compatível. Em caso de falha do provedor, o Whisper pelo OpenRouter atua como reserva."
+        description="Use AssemblyAI-STT-3.7 ou ElevenLabs Scribe v3 diretamente pela API oficial, ou compare com modelos do OpenRouter (Universal-3.6 Pro ou ElevenLabs Scribe v2) e qualquer ID customizado compatível. Em caso de falha do provedor, o Whisper pelo OpenRouter atua como reserva."
         action={status && <span role="status" className={"inline-flex items-center gap-1.5 text-[12px] " + (status.ok ? "text-cue" : "text-live")}>{status.ok && <Check className="h-3.5 w-3.5" aria-hidden />}{status.text}</span>}
       >
         {route ? (
@@ -342,12 +345,12 @@ function TranscricaoTab() {
                 value={route.provider}
                 onChange={(e) => {
                   const provider = e.target.value as TranscriptionProvider;
-                  if (provider === "assemblyai") {
+                  if (provider === "assemblyai" || provider === "elevenlabs") {
                     setCustomOpen(false);
                     persistRoute({
                       ...route,
                       provider,
-                      model: "assemblyai-stt-3-7",
+                      model: provider === "assemblyai" ? "assemblyai-stt-3-7" : "elevenlabs-scribe-v3",
                       use_custom_model: false,
                     });
                   } else {
@@ -365,6 +368,7 @@ function TranscricaoTab() {
                 }}
               >
                 <option value="assemblyai">AssemblyAI (API direta)</option>
+                <option value="elevenlabs">ElevenLabs (API direta)</option>
                 <option value="open-router">OpenRouter</option>
               </Select>
             </PreferenceRow>
@@ -397,7 +401,7 @@ function TranscricaoTab() {
             {route.provider === "open-router" && customOpen && (
               <PreferenceRow
                 title="ID customizado"
-                description="Informe qualquer ID compatível no formato provedor/modelo (ex.: assemblyai/universal-3-6-pro ou openai/whisper-large-v3)."
+                description="Informe qualquer ID compatível no formato provedor/modelo (ex.: assemblyai/universal-3-6-pro ou elevenlabs/scribe-v2)."
                 htmlFor="route-custom-model"
               >
                 <div className="flex w-[320px] max-w-full gap-2">
@@ -436,15 +440,16 @@ function TranscricaoTab() {
 
 /* ------------------------------- Provedores ------------------------------- */
 
-type KeyId = "assemblyai" | "openrouter";
+type KeyId = "assemblyai" | "elevenlabs" | "openrouter";
 
 const PROVIDERS: { id: KeyId; name: string; placeholder: string; usedBy: string }[] = [
   { id: "assemblyai", name: "AssemblyAI", placeholder: "Chave da API da AssemblyAI…", usedBy: "Transcrição direta com AssemblyAI-STT-3.7" },
-  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Universal-3.6 Pro, Whisper, IDs customizados, reserva, comando de voz e retrato da voz" },
+  { id: "elevenlabs", name: "ElevenLabs", placeholder: "Chave da API da ElevenLabs…", usedBy: "Transcrição direta com ElevenLabs Scribe v3" },
+  { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…", usedBy: "Universal-3.6 Pro, Scribe v2, IDs customizados, reserva Whisper, comando de voz e retrato da voz" },
 ];
 
 function ProvedoresList() {
-  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ assemblyai: [], openrouter: [] });
+  const [keys, setKeys] = useState<Record<KeyId, string[]>>({ assemblyai: [], elevenlabs: [], openrouter: [] });
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<KeyId | null>(null);
   const [saved, setSaved] = useState<KeyId | null>(null);
@@ -453,7 +458,7 @@ function ProvedoresList() {
 
   useEffect(() => {
     getApiKeys()
-      .then((k) => setKeys({ assemblyai: k.assemblyai ?? [], openrouter: k.openrouter ?? [] }))
+      .then((k) => setKeys({ assemblyai: k.assemblyai ?? [], elevenlabs: k.elevenlabs ?? [], openrouter: k.openrouter ?? [] }))
       .catch(console.error);
   }, []);
 
