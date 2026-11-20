@@ -105,7 +105,7 @@ pub fn pcm_s16le_16k_mono(wav: &[u8]) -> Option<&[u8]> {
                 return None;
             }
             let data = &wav[body_start..body_end.min(wav.len())];
-            return (!data.is_empty() && data.len() % 2 == 0).then_some(data);
+            return (!data.is_empty() && data.len().is_multiple_of(2)).then_some(data);
         }
         // Chunks are word-aligned.
         offset = body_end + (size & 1);
