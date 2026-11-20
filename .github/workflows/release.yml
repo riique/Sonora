@@ -30,6 +30,14 @@ jobs:
       - name: Select Rust toolchain
         run: rustup toolchain install 1.97.1 --profile minimal
       - run: rustup override set 1.97.1
+      # Reuses the compiled dependencies that "Windows qualification" saves on
+      # every master push, so a release only rebuilds the Sonora crate itself.
+      # Restore-only here: the release job never writes the shared cache.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          shared-key: windows-build
+          save-if: false
       - run: npm ci
       - run: npm run lint
       - uses: tauri-apps/tauri-action@v0

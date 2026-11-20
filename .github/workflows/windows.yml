@@ -18,6 +18,13 @@ jobs:
       - name: Select Rust toolchain
         run: rustup toolchain install 1.97.1 --profile minimal --component clippy --component rustfmt
       - run: rustup override set 1.97.1
+      # Shared with the Release workflow (same shared-key). Only master pushes
+      # save, so branches and PRs cannot overwrite the release cache.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+          shared-key: windows-build
+          save-if: ${{ github.ref == 'refs/heads/master' }}
       - run: npm ci
       - run: npm run lint
       - run: npm run test:frontend
